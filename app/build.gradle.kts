@@ -9,8 +9,8 @@ android {
         applicationId = "com.example.dualaudioplayer"
         minSdk = 31
         targetSdk = 34
-        versionCode = 18
-        versionName = "18.0 Device Routing"
+        versionCode = 19
+        versionName = "19.0 API Fixed"
     }
     buildTypes {
         release {

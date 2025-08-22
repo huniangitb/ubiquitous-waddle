@@ -45,7 +45,7 @@ class MediaPlaybackService : Service() {
     private var speakerPlayer: MediaPlayer? = null
     private var earpieceEqualizer: Equalizer? = null
     private var speakerEqualizer: Equalizer? = null
-    private var earpieceDevice: AudioDeviceInfo? = null // 关键：保存听筒设备信息
+    private var earpieceDevice: AudioDeviceInfo? = null
     private var audioList: List<AudioItem> = emptyList()
     private var currentIndex = -1
     var isPlaying = false
@@ -65,7 +65,6 @@ class MediaPlaybackService : Service() {
     override fun onCreate() {
         super.onCreate()
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        // 关键：在服务创建时就找到听筒设备
         earpieceDevice = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
             .find { it.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE }
         if (earpieceDevice == null) {
@@ -111,7 +110,7 @@ class MediaPlaybackService : Service() {
     fun setSyncDelay(ms: Int) {
         this.syncDelayMs = ms
         if (isPlaying && areAllPlayersReady()) {
-            val pos = earpiecePlayer?.currentPosition ?: 0
+            val pos = earpiecePlayer?.currentPosition ?: speakerPlayer?.currentPosition ?: 0
             pauseAudio()
             seekTo(pos)
             resumeAudio()
@@ -125,21 +124,19 @@ class MediaPlaybackService : Service() {
         playersPreparedCount = 0
         try {
             val uri = audioList[index].uri
-            // 关键：两个播放器都使用标准 USAGE_MEDIA
             speakerPlayer = createPlayer(uri)
-            // 只有在找到听筒设备时才创建听筒播放器
             if (earpieceDevice != null) {
                 earpiecePlayer = createPlayer(uri, earpieceDevice)
             } else {
-                playersPreparedCount++ // 手动增加计数，否则永远无法达到2
+                playersPreparedCount++
             }
         } catch (e: IOException) { Toast.makeText(this, "无法播放文件", Toast.LENGTH_SHORT).show() }
     }
     
-    // 关键：重载 createPlayer 方法
+    // 关键修复：使用 setPreferredDevice 替代 setAudioDeviceInfo
     private fun createPlayer(uri: Uri, audioDevice: AudioDeviceInfo? = null) = MediaPlayer().apply {
         setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).build())
-        audioDevice?.let { setAudioDeviceInfo(it) } // 如果提供了设备，就设置它
+        audioDevice?.let { setPreferredDevice(it) } // 使用替代 API
         setDataSource(this@MediaPlaybackService, uri)
         setOnPreparedListener { onPlayerPrepared() }
         setOnCompletionListener { checkCompletion() }
@@ -149,7 +146,6 @@ class MediaPlaybackService : Service() {
     @Synchronized
     private fun onPlayerPrepared() {
         playersPreparedCount++
-        // 如果没有听筒，计数达到1就认为准备好了
         val targetPreparedCount = if (earpieceDevice != null) 2 else 1
         if (playersPreparedCount == targetPreparedCount) {
             setupAudioEffects()
@@ -158,24 +154,26 @@ class MediaPlaybackService : Service() {
         }
     }
     
+    private fun areAllPlayersReady(): Boolean {
+        return if (earpieceDevice == null) {
+            speakerPlayer != null
+        } else {
+            earpiecePlayer != null && speakerPlayer != null
+        }
+    }
+    
     // --- 其他方法保持不变 ---
     fun setAudioList(list: List<AudioItem>) { this.audioList = list }
     fun togglePlayPause() { if (isPlaying) pauseAudio() else resumeAudio() }
     private fun playAudio() {
-        if (!areAllPlayersReady() || isPlaying) return
-        val earpieceDelay = max(0, syncDelayMs).toLong()
-        val speakerDelay = max(0, -syncDelayMs).toLong()
-        // 只有在播放器存在时才启动
-        serviceScope.launch { delay(earpieceDelay); earpiecePlayer?.start() }
-        serviceScope.launch { delay(speakerDelay); speakerPlayer?.start() }
+        if (!areAllPlayersReady() || isPlaying) return; val earpieceDelay = max(0, syncDelayMs).toLong(); val speakerDelay = max(0, -syncDelayMs).toLong()
+        serviceScope.launch { delay(earpieceDelay); earpiecePlayer?.start() }; serviceScope.launch { delay(speakerDelay); speakerPlayer?.start() }
         isPlaying = true; updateNotification(); handler.post(updateSeekBarRunnable)
     }
     private fun resumeAudio() { if (areAllPlayersReady() && !isPlaying) playAudio() }
     private fun pauseAudio() {
-        if (!areAllPlayersReady()) return
-        serviceScope.coroutineContext.cancelChildren(); handler.removeCallbacksAndMessages(null)
-        getAllPlayers().forEach { it?.takeIf { p -> p.isPlaying }?.pause() }
-        isPlaying = false; updateNotification(); broadcastUpdate()
+        if (!areAllPlayersReady()) return; serviceScope.coroutineContext.cancelChildren(); handler.removeCallbacksAndMessages(null)
+        getAllPlayers().forEach { it?.takeIf { p -> p.isPlaying }?.pause() }; isPlaying = false; updateNotification(); broadcastUpdate()
     }
     fun seekTo(position: Int) { getAllPlayers().forEach { it?.seekTo(position) } }
     private fun playNext() { if (audioList.isNotEmpty()) playSongAtIndex((currentIndex + 1) % audioList.size) }
@@ -224,14 +222,6 @@ class MediaPlaybackService : Service() {
         earpieceEqualizer?.release(); speakerEqualizer?.release(); earpieceEqualizer = null; speakerEqualizer = null; isPlaying = false
     }
     private fun getAllPlayers() = listOf(earpiecePlayer, speakerPlayer)
-    private fun areAllPlayersReady(): Boolean {
-        // 如果没有听筒设备，只要扬声器准备好了就行
-        return if (earpieceDevice == null) {
-            speakerPlayer != null
-        } else {
-            earpiecePlayer != null && speakerPlayer != null
-        }
-    }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         intent?.action?.let { action -> when (action) { ACTION_PLAY_PAUSE -> togglePlayPause(); ACTION_NEXT -> playNext(); ACTION_PREV -> playPrev() } }; return START_NOT_STICKY
     }
