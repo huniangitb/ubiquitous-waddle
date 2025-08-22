@@ -9,8 +9,8 @@ android {
         applicationId = "com.example.dualaudioplayer"
         minSdk = 31
         targetSdk = 34
-        versionCode = 12
-        versionName = "12.0 UX Final"
+        versionCode = 14
+        versionName = "14.0 Attenuation"
     }
     buildTypes {
         release {

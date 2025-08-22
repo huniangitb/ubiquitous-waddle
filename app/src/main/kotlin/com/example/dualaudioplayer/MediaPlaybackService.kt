@@ -14,7 +14,6 @@ import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.audiofx.Equalizer
-import android.media.audiofx.LoudnessEnhancer
 import android.net.Uri
 import android.os.Binder
 import android.os.Handler
@@ -24,13 +23,16 @@ import android.provider.MediaStore
 import android.widget.Toast
 import kotlinx.coroutines.*
 import java.io.IOException
+import kotlin.math.log10
 import kotlin.math.max
+import kotlin.math.pow
 
 class MediaPlaybackService : Service() {
 
     companion object {
         const val ACTION_UPDATE_UI = "com.example.dualaudioplayer.UPDATE_UI"
         const val ACTION_PLAY_PAUSE = "ACTION_PLAY_PAUSE"
+        // ... (其他常量)
         const val ACTION_NEXT = "ACTION_NEXT"
         const val ACTION_PREV = "ACTION_PREV"
         private const val CHANNEL_ID = "DualAudioChannel"
@@ -47,21 +49,21 @@ class MediaPlaybackService : Service() {
     private var speakerPlayer: MediaPlayer? = null
     private var earpieceEqualizer: Equalizer? = null
     private var speakerEqualizer: Equalizer? = null
-    private var earpieceEnhancer: LoudnessEnhancer? = null
-    private var speakerEnhancer: LoudnessEnhancer? = null
     private var audioList: List<AudioItem> = emptyList()
     private var currentIndex = -1
     var isPlaying = false
         private set
     private var playersPreparedCount = 0
     private var syncDelayMs = 0
+    
+    // 存储线性衰减值 (0.0 to 1.0)
+    private var earpieceAttenuation = 1.0f
+    private var speakerAttenuation = 1.0f
 
     private val volumeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == VOLUME_CHANGED_ACTION) {
-                if (intent.getIntExtra("android.media.EXTRA_VOLUME_STREAM_TYPE", -1) == AudioManager.STREAM_MUSIC) {
-                    syncVolume()
-                }
+            if (intent.action == VOLUME_CHANGED_ACTION && intent.getIntExtra("android.media.EXTRA_VOLUME_STREAM_TYPE", -1) == AudioManager.STREAM_MUSIC) {
+                syncVolume()
             }
         }
     }
@@ -83,19 +85,47 @@ class MediaPlaybackService : Service() {
         unregisterReceiver(volumeReceiver)
     }
 
+    // 关键修复：音量同步逻辑
     private fun syncVolume() {
         val mediaVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
         val maxMediaVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val systemVolumeRatio = if (maxMediaVolume > 0) mediaVolume.toFloat() / maxMediaVolume.toFloat() else 0f
+
+        // 1. 控制听筒 (STREAM_VOICE_CALL)
         val maxVoiceVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)
-        if (maxMediaVolume > 0) {
-            val volumeRatio = mediaVolume.toFloat() / maxMediaVolume.toFloat()
-            val voiceVolume = (volumeRatio * maxVoiceVolume).toInt()
-            audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, voiceVolume, 0)
+        // 最终音量 = 系统音量比例 * 应用内衰减比例
+        val finalEarpieceRatio = systemVolumeRatio * earpieceAttenuation
+        val voiceVolume = (finalEarpieceRatio * maxVoiceVolume).toInt()
+        audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, voiceVolume, 0)
+        
+        // 2. 控制扬声器 (MediaPlayer 自身的音量)
+        val finalSpeakerVolume = systemVolumeRatio * speakerAttenuation
+        // 因为扬声器我们只用右声道，所以左声道设为0
+        speakerPlayer?.setVolume(0.0f, finalSpeakerVolume)
+    }
+
+    fun setEarpieceAttenuationDb(db: Float) {
+        earpieceAttenuation = 10.0f.pow(db / 20.0f)
+        syncVolume() // 立即应用
+    }
+    
+    fun setSpeakerAttenuationDb(db: Float) {
+        speakerAttenuation = 10.0f.pow(db / 20.0f)
+        syncVolume() // 立即应用
+    }
+
+    @Synchronized
+    private fun onPlayerPrepared() {
+        playersPreparedCount++
+        if (playersPreparedCount == 2) {
+            setupAudioEffects()
+            syncVolume()
+            playAudio()
         }
     }
 
+    // --- 其他方法 ---
     fun setAudioList(list: List<AudioItem>) { this.audioList = list }
-
     fun playSongAtIndex(index: Int) {
         if (index !in audioList.indices) return
         currentIndex = index
@@ -107,7 +137,6 @@ class MediaPlaybackService : Service() {
             speakerPlayer = createPlayer(uri, AudioAttributes.USAGE_MEDIA)
         } catch (e: IOException) { Toast.makeText(this, "无法播放文件", Toast.LENGTH_SHORT).show() }
     }
-
     private fun createPlayer(uri: Uri, usage: Int) = MediaPlayer().apply {
         setAudioAttributes(AudioAttributes.Builder().setUsage(usage).build())
         setDataSource(this@MediaPlaybackService, uri)
@@ -115,21 +144,7 @@ class MediaPlaybackService : Service() {
         setOnCompletionListener { checkCompletion() }
         prepareAsync()
     }
-
-    @Synchronized
-    private fun onPlayerPrepared() {
-        playersPreparedCount++
-        if (playersPreparedCount == 2) {
-            earpiecePlayer?.setVolume(1.0f, 0.0f)
-            speakerPlayer?.setVolume(0.0f, 1.0f)
-            setupAudioEffects()
-            syncVolume()
-            playAudio()
-        }
-    }
-
     fun togglePlayPause() { if (isPlaying) pauseAudio() else resumeAudio() }
-
     private fun playAudio() {
         if (!areAllPlayersReady() || isPlaying) return
         val earpieceDelay = max(0, syncDelayMs).toLong()
@@ -155,18 +170,10 @@ class MediaPlaybackService : Service() {
     private fun playPrev() { if (audioList.isNotEmpty()) playSongAtIndex((currentIndex - 1 + audioList.size) % audioList.size) }
     private fun checkCompletion() { if (isPlaying && earpiecePlayer?.isPlaying == false) playNext() }
     fun setSyncDelay(ms: Int) { this.syncDelayMs = ms }
-    fun setEarpieceGainDb(db: Float) { earpieceEnhancer?.setTargetGain((db * 100).toInt()) }
-    fun setSpeakerGainDb(db: Float) { speakerEnhancer?.setTargetGain((db * 100).toInt()) }
     private fun setupAudioEffects() {
         try {
-            earpiecePlayer?.audioSessionId?.let {
-                earpieceEqualizer = Equalizer(0, it).apply { setEnabled(true) }
-                earpieceEnhancer = LoudnessEnhancer(it).apply { setEnabled(true) }
-            }
-            speakerPlayer?.audioSessionId?.let {
-                speakerEqualizer = Equalizer(0, it).apply { setEnabled(true) }
-                speakerEnhancer = LoudnessEnhancer(it).apply { setEnabled(true) }
-            }
+            earpiecePlayer?.audioSessionId?.let { earpieceEqualizer = Equalizer(0, it).apply { setEnabled(true) } }
+            speakerPlayer?.audioSessionId?.let { speakerEqualizer = Equalizer(0, it).apply { setEnabled(true) } }
         } catch (e: Exception) { /* Ignore */ }
     }
     fun updateHighPassFilter(freqHz: Int) {
@@ -210,20 +217,14 @@ class MediaPlaybackService : Service() {
     private fun releasePlayers() {
         handler.removeCallbacksAndMessages(null); serviceScope.coroutineContext.cancelChildren()
         getAllPlayers().forEach { it?.release() }; earpiecePlayer = null; speakerPlayer = null
-        earpieceEqualizer?.release(); speakerEqualizer?.release(); earpieceEnhancer?.release(); speakerEnhancer?.release()
-        earpieceEqualizer = null; speakerEqualizer = null; earpieceEnhancer = null; speakerEnhancer = null
+        earpieceEqualizer?.release(); speakerEqualizer?.release()
+        earpieceEqualizer = null; speakerEqualizer = null
         isPlaying = false
     }
     private fun getAllPlayers() = listOf(earpiecePlayer, speakerPlayer)
     private fun areAllPlayersReady() = earpiecePlayer != null && speakerPlayer != null
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        intent?.action?.let {
-            when (it) {
-                ACTION_PLAY_PAUSE -> togglePlayPause()
-                ACTION_NEXT -> playNext()
-                ACTION_PREV -> playPrev()
-            }
-        }
+        intent?.action?.let { action -> when (action) { ACTION_PLAY_PAUSE -> togglePlayPause(); ACTION_NEXT -> playNext(); ACTION_PREV -> playPrev() } }
         return START_NOT_STICKY
     }
 }

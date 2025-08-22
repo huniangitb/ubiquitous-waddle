@@ -78,10 +78,13 @@
         app:behavior_peekHeight="0dp"
         app:behavior_hideable="true">
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="高级音频设置" android:textAppearance="?attr/textAppearanceTitleMedium" android:layout_marginBottom="16dp"/>
-        <TextView android:id="@+id/earpieceGainLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="听筒增益: 0.0 dB" android:textAppearance="?attr/textAppearanceLabelLarge"/>
-        <com.google.android.material.slider.Slider android:id="@+id/earpieceGainSlider" android:layout_width="match_parent" android:layout_height="wrap_content" android:valueFrom="-6.0" android:valueTo="6.0" android:stepSize="0.5" android:value="0.0"/>
-        <TextView android:id="@+id/speakerGainLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="扬声器增益: 0.0 dB" android:textAppearance="?attr/textAppearanceLabelLarge" android:layout_marginTop="8dp"/>
-        <com.google.android.material.slider.Slider android:id="@+id/speakerGainSlider" android:layout_width="match_parent" android:layout_height="wrap_content" android:valueFrom="-6.0" android:valueTo="6.0" android:stepSize="0.5" android:value="0.0"/>
+        
+        <TextView android:id="@+id/earpieceGainLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="听筒衰减: 0.0 dB" android:textAppearance="?attr/textAppearanceLabelLarge"/>
+        <com.google.android.material.slider.Slider android:id="@+id/earpieceGainSlider" android:layout_width="match_parent" android:layout_height="wrap_content" android:valueFrom="-24.0" android:valueTo="0.0" android:stepSize="1.0" android:value="0.0"/>
+        
+        <TextView android:id="@+id/speakerGainLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="扬声器衰减: 0.0 dB" android:textAppearance="?attr/textAppearanceLabelLarge" android:layout_marginTop="8dp"/>
+        <com.google.android.material.slider.Slider android:id="@+id/speakerGainSlider" android:layout_width="match_parent" android:layout_height="wrap_content" android:valueFrom="-24.0" android:valueTo="0.0" android:stepSize="1.0" android:value="0.0"/>
+
         <com.google.android.material.divider.MaterialDivider android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:layout_marginBottom="16dp"/>
         <TextView android:id="@+id/delayLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="同步延迟: 0 ms" android:textAppearance="?attr/textAppearanceLabelLarge"/>
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="左滑延迟扬声器, 右滑延迟听筒" android:textAppearance="?attr/textAppearanceBodySmall"/>

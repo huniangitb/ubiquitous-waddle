@@ -104,12 +104,12 @@ class MainActivity : AppCompatActivity() {
         val listener = Slider.OnChangeListener { slider, value, _ ->
             when (slider.id) {
                 R.id.earpieceGainSlider -> {
-                    binding.earpieceGainLabel.text = "听筒增益: %.1f dB".format(Locale.US, value)
-                    mediaService?.setEarpieceGainDb(value)
+                    binding.earpieceGainLabel.text = "听筒衰减: %.1f dB".format(Locale.US, value)
+                    mediaService?.setEarpieceAttenuationDb(value)
                 }
                 R.id.speakerGainSlider -> {
-                    binding.speakerGainLabel.text = "扬声器增益: %.1f dB".format(Locale.US, value)
-                    mediaService?.setSpeakerGainDb(value)
+                    binding.speakerGainLabel.text = "扬声器衰减: %.1f dB".format(Locale.US, value)
+                    mediaService?.setSpeakerAttenuationDb(value)
                 }
                 R.id.delaySlider -> {
                     val target = when { value == 0f -> "无"; value > 0f -> "听筒"; else -> "扬声器" }
@@ -152,6 +152,7 @@ class MainActivity : AppCompatActivity() {
         binding.highPassFilterSlider.addOnSliderTouchListener(stopListener)
         binding.lowPassFilterSlider.addOnSliderTouchListener(stopListener)
     }
+
     private fun loadSettings() {
         val prefs = getSharedPreferences("DualAudioPrefs", MODE_PRIVATE)
         with(binding) {
@@ -205,8 +206,8 @@ class MainActivity : AppCompatActivity() {
             mediaService = binder.getService(); isBound = true
             mediaService?.setAudioList(audioList)
             loadSettings()
-            mediaService?.setEarpieceGainDb(binding.earpieceGainSlider.value)
-            mediaService?.setSpeakerGainDb(binding.speakerGainSlider.value)
+            mediaService?.setEarpieceAttenuationDb(binding.earpieceGainSlider.value)
+            mediaService?.setSpeakerAttenuationDb(binding.speakerGainSlider.value)
             mediaService?.setSyncDelay(binding.delaySlider.value.toInt())
             mediaService?.updateHighPassFilter(binding.highPassFilterSlider.value.toInt())
             mediaService?.updateLowPassFilter(binding.lowPassFilterSlider.value.toInt())
