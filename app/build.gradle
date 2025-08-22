@@ -4,12 +4,12 @@ plugins {
 
 android {
     namespace 'com.example.dualaudioplayer'
-    compileSdk 33
+    compileSdk 34
 
     defaultConfig {
         applicationId "com.example.dualaudioplayer"
         minSdk 21
-        targetSdk 33
+        targetSdk 34
         versionCode 4
         versionName "4.0 M3"
     }
