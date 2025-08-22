@@ -10,7 +10,7 @@ android {
         minSdk = 31
         targetSdk = 34
         versionCode = 18
-        versionName = "18.0 Slider Fixed"
+        versionName = "18.0 Device Routing"
     }
     buildTypes {
         release {
