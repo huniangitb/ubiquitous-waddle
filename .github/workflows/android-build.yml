@@ -11,10 +11,10 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v5.0.0
+      uses: actions/checkout@v4 # 建议使用最新稳定版本，v4 是当前推荐的
 
     - name: Set up JDK 17
-      uses: actions/setup-java@v5.0.0
+      uses: actions/setup-java@v4 # 建议使用最新稳定版本，v4 是当前推荐的
       with:
         distribution: 'temurin'
         java-version: '17'
@@ -22,20 +22,18 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3.2.2
 
-    # 使用 gradle/gradle-build-action 来设置 Gradle 环境
-    # 这个 Action 会自动处理 Gradle Wrapper 的下载和缓存
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
       with:
-        gradle-version: 7.5 # 明确指定 Gradle 版本，与 gradle-wrapper.properties 保持一致
+        gradle-version: 7.5
 
-    # 授予 gradlew 执行权限（仍然需要，因为 checkout 后可能丢失）
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
+    # 移除这一步，因为我们不使用项目内的 gradlew 脚本
+    # - name: Grant execute permission for gradlew
+    #   run: chmod +x gradlew
 
     - name: Build Debug APK (Unsigned)
-      # gradle/gradle-build-action 已经设置了 PATH，可以直接运行 gradlew
-      run: gradlew assembleDebug
+      # 关键更改：使用 'gradle' 命令而不是 'gradlew'
+      run: gradle assembleDebug
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
