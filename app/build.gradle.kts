@@ -9,8 +9,8 @@ android {
         applicationId = "com.example.dualaudioplayer"
         minSdk = 31
         targetSdk = 34
-        versionCode = 14
-        versionName = "14.0 Attenuation"
+        versionCode = 15
+        versionName = "15.0 Channel Separation"
     }
     buildTypes {
         release {

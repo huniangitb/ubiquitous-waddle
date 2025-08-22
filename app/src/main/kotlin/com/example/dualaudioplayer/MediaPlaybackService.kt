@@ -23,7 +23,6 @@ import android.provider.MediaStore
 import android.widget.Toast
 import kotlinx.coroutines.*
 import java.io.IOException
-import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.pow
 
@@ -32,7 +31,6 @@ class MediaPlaybackService : Service() {
     companion object {
         const val ACTION_UPDATE_UI = "com.example.dualaudioplayer.UPDATE_UI"
         const val ACTION_PLAY_PAUSE = "ACTION_PLAY_PAUSE"
-        // ... (其他常量)
         const val ACTION_NEXT = "ACTION_NEXT"
         const val ACTION_PREV = "ACTION_PREV"
         private const val CHANNEL_ID = "DualAudioChannel"
@@ -55,8 +53,6 @@ class MediaPlaybackService : Service() {
         private set
     private var playersPreparedCount = 0
     private var syncDelayMs = 0
-    
-    // 存储线性衰减值 (0.0 to 1.0)
     private var earpieceAttenuation = 1.0f
     private var speakerAttenuation = 1.0f
 
@@ -85,33 +81,35 @@ class MediaPlaybackService : Service() {
         unregisterReceiver(volumeReceiver)
     }
 
-    // 关键修复：音量同步逻辑
     private fun syncVolume() {
         val mediaVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
         val maxMediaVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
         val systemVolumeRatio = if (maxMediaVolume > 0) mediaVolume.toFloat() / maxMediaVolume.toFloat() else 0f
 
-        // 1. 控制听筒 (STREAM_VOICE_CALL)
+        // 1. 控制听筒
+        val finalEarpieceVolume = systemVolumeRatio * earpieceAttenuation
+        // 关键修复：直接在播放器层面强制只播放左声道
+        earpiecePlayer?.setVolume(finalEarpieceVolume, 0.0f)
+        
+        // 同时同步系统通话音量流，以确保路由正确
         val maxVoiceVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)
-        // 最终音量 = 系统音量比例 * 应用内衰减比例
-        val finalEarpieceRatio = systemVolumeRatio * earpieceAttenuation
-        val voiceVolume = (finalEarpieceRatio * maxVoiceVolume).toInt()
+        val voiceVolume = (finalEarpieceVolume * maxVoiceVolume).toInt()
         audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, voiceVolume, 0)
         
-        // 2. 控制扬声器 (MediaPlayer 自身的音量)
+        // 2. 控制扬声器
         val finalSpeakerVolume = systemVolumeRatio * speakerAttenuation
-        // 因为扬声器我们只用右声道，所以左声道设为0
+        // 关键修复：直接在播放器层面强制只播放右声道
         speakerPlayer?.setVolume(0.0f, finalSpeakerVolume)
     }
 
     fun setEarpieceAttenuationDb(db: Float) {
         earpieceAttenuation = 10.0f.pow(db / 20.0f)
-        syncVolume() // 立即应用
+        syncVolume()
     }
     
     fun setSpeakerAttenuationDb(db: Float) {
         speakerAttenuation = 10.0f.pow(db / 20.0f)
-        syncVolume() // 立即应用
+        syncVolume()
     }
 
     @Synchronized
@@ -124,7 +122,7 @@ class MediaPlaybackService : Service() {
         }
     }
 
-    // --- 其他方法 ---
+    // --- 其他方法保持不变 ---
     fun setAudioList(list: List<AudioItem>) { this.audioList = list }
     fun playSongAtIndex(index: Int) {
         if (index !in audioList.indices) return
