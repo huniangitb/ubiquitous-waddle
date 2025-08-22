@@ -85,6 +85,28 @@
         <TextView android:id="@+id/speakerGainLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="扬声器衰减: 0.0 dB" android:textAppearance="?attr/textAppearanceLabelLarge" android:layout_marginTop="8dp"/>
         <com.google.android.material.slider.Slider android:id="@+id/speakerGainSlider" android:layout_width="match_parent" android:layout_height="wrap_content" android:valueFrom="-24.0" android:valueTo="0.0" android:stepSize="1.0" android:value="0.0"/>
 
+        <!-- 新增的静音开关 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="16dp">
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/enableEarpieceSwitch"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="启用听筒"
+                android:checked="true"/>
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/enableSpeakerSwitch"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="启用扬声器"
+                android:checked="true"/>
+        </LinearLayout>
+
         <com.google.android.material.divider.MaterialDivider android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:layout_marginBottom="16dp"/>
         <TextView android:id="@+id/delayLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="同步延迟: 0 ms" android:textAppearance="?attr/textAppearanceLabelLarge"/>
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="左滑延迟扬声器, 右滑延迟听筒" android:textAppearance="?attr/textAppearanceBodySmall"/>

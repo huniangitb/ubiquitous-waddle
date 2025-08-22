@@ -76,7 +76,7 @@ class MainActivity : AppCompatActivity() {
             adapter = audioAdapter
         }
         binding.fabPlayPause.setOnClickListener { mediaService?.togglePlayPause() }
-        setupSliderListeners()
+        setupAdvancedControlListeners()
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -94,13 +94,25 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun setupSliderListeners() {
+    private fun setupAdvancedControlListeners() {
+        // Playback Slider
         binding.playbackSlider.addOnSliderTouchListener(object : Slider.OnSliderTouchListener {
             override fun onStartTrackingTouch(slider: Slider) {}
             override fun onStopTrackingTouch(slider: Slider) { mediaService?.seekTo((slider.value * 1000).toInt()) }
         })
+
+        // Mute Switches
+        binding.enableEarpieceSwitch.setOnCheckedChangeListener { _, isChecked ->
+            mediaService?.setEarpieceEnabled(isChecked)
+            saveBoolean("earpieceEnabled", isChecked)
+        }
+        binding.enableSpeakerSwitch.setOnCheckedChangeListener { _, isChecked ->
+            mediaService?.setSpeakerEnabled(isChecked)
+            saveBoolean("speakerEnabled", isChecked)
+        }
+        
+        // Other Sliders
         val listener = Slider.OnChangeListener { slider, value, fromUser ->
-            // 只有当用户拖动时才实时更新，避免在loadSettings时触发不必要的调用
             if (!fromUser) return@OnChangeListener
             when (slider.id) {
                 R.id.earpieceGainSlider -> {
@@ -128,11 +140,10 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        binding.earpieceGainSlider.addOnChangeListener(listener)
-        binding.speakerGainSlider.addOnChangeListener(listener)
-        binding.delaySlider.addOnChangeListener(listener)
-        binding.highPassFilterSlider.addOnChangeListener(listener)
+        binding.earpieceGainSlider.addOnChangeListener(listener); binding.speakerGainSlider.addOnChangeListener(listener)
+        binding.delaySlider.addOnChangeListener(listener); binding.highPassFilterSlider.addOnChangeListener(listener)
         binding.lowPassFilterSlider.addOnChangeListener(listener)
+        
         val stopListener = object : Slider.OnSliderTouchListener {
             override fun onStartTrackingTouch(slider: Slider) {}
             override fun onStopTrackingTouch(slider: Slider) {
@@ -145,10 +156,8 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        binding.earpieceGainSlider.addOnSliderTouchListener(stopListener)
-        binding.speakerGainSlider.addOnSliderTouchListener(stopListener)
-        binding.delaySlider.addOnSliderTouchListener(stopListener)
-        binding.highPassFilterSlider.addOnSliderTouchListener(stopListener)
+        binding.earpieceGainSlider.addOnSliderTouchListener(stopListener); binding.speakerGainSlider.addOnSliderTouchListener(stopListener)
+        binding.delaySlider.addOnSliderTouchListener(stopListener); binding.highPassFilterSlider.addOnSliderTouchListener(stopListener)
         binding.lowPassFilterSlider.addOnSliderTouchListener(stopListener)
     }
 
@@ -160,6 +169,8 @@ class MainActivity : AppCompatActivity() {
             delaySlider.value = prefs.getInt("syncDelay", 0).toFloat()
             highPassFilterSlider.value = prefs.getInt("highPass", 50).toFloat()
             lowPassFilterSlider.value = prefs.getInt("lowPass", 15000).toFloat()
+            enableEarpieceSwitch.isChecked = prefs.getBoolean("earpieceEnabled", true)
+            enableSpeakerSwitch.isChecked = prefs.getBoolean("speakerEnabled", true)
         }
     }
     private fun snapToStep(value: Float, valueFrom: Float, stepSize: Float): Float {
@@ -168,6 +179,8 @@ class MainActivity : AppCompatActivity() {
     }
     private fun saveFloat(key: String, value: Float) = getSharedPreferences("DualAudioPrefs", MODE_PRIVATE).edit().putFloat(key, value).apply()
     private fun saveInt(key: String, value: Int) = getSharedPreferences("DualAudioPrefs", MODE_PRIVATE).edit().putInt(key, value).apply()
+    private fun saveBoolean(key: String, value: Boolean) = getSharedPreferences("DualAudioPrefs", MODE_PRIVATE).edit().putBoolean(key, value).apply()
+    
     private fun checkAndRequestPermissions() {
         val permissions = mutableListOf(Manifest.permission.READ_MEDIA_AUDIO)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { permissions.add(Manifest.permission.POST_NOTIFICATIONS) }
@@ -190,9 +203,10 @@ class MainActivity : AppCompatActivity() {
     private fun updateUI(isPlaying: Boolean, currentIndex: Int, currentPosition: Int, duration: Int) {
         binding.fabPlayPause.setImageResource(if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
         if (currentIndex in audioList.indices) { binding.statusTextView.text = audioList[currentIndex].title }
-        val durSec = if (duration > 0) duration / 1000 else 100
-        val curSec = currentPosition / 1000
-        binding.playbackSlider.valueTo = durSec.toFloat(); binding.playbackSlider.value = curSec.toFloat()
+        val durationInSeconds = duration / 1000f; val currentPositionInSeconds = currentPosition / 1000f
+        val sliderValueTo = if (durationInSeconds > 0) durationInSeconds else 1f
+        binding.playbackSlider.valueTo = sliderValueTo
+        binding.playbackSlider.value = currentPositionInSeconds.coerceIn(0f, sliderValueTo)
         binding.currentTimeTextView.text = formatTime(currentPosition); binding.totalTimeTextView.text = formatTime(duration)
     }
     private fun formatTime(millis: Int): String = String.format(Locale.US, "%d:%02d", TimeUnit.MILLISECONDS.toMinutes(millis.toLong()), TimeUnit.MILLISECONDS.toSeconds(millis.toLong()) % 60)
@@ -205,9 +219,11 @@ class MainActivity : AppCompatActivity() {
             mediaService = binder.getService(); isBound = true
             mediaService?.setAudioList(audioList)
             loadSettings()
-            // 在服务连接后，将UI上的初始值传递给服务
+            // 将所有初始状态传递给服务
             mediaService?.setEarpieceAttenuationDb(binding.earpieceGainSlider.value)
             mediaService?.setSpeakerAttenuationDb(binding.speakerGainSlider.value)
+            mediaService?.setEarpieceEnabled(binding.enableEarpieceSwitch.isChecked)
+            mediaService?.setSpeakerEnabled(binding.enableSpeakerSwitch.isChecked)
             mediaService?.setSyncDelay(binding.delaySlider.value.toInt())
             mediaService?.updateHighPassFilter(binding.highPassFilterSlider.value.toInt())
             mediaService?.updateLowPassFilter(binding.lowPassFilterSlider.value.toInt())
