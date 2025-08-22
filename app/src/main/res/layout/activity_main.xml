@@ -97,7 +97,15 @@
         
         <TextView android:id="@+id/delayLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="同步延迟: 0 ms" android:textAppearance="?attr/textAppearanceLabelLarge"/>
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="左滑延迟扬声器, 右滑延迟听筒" android:textAppearance="?attr/textAppearanceBodySmall"/>
-        <com.google.android.material.slider.Slider android:id="@+id/delaySlider" android:layout_width="match_parent" android:layout_height="wrap_content" android:valueFrom="-400.0" android:valueTo="400.0" android:stepSize="10.0" android:value="0.0"/>
+        <com.google.android.material.slider.Slider
+            android:id="@+id/delaySlider"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:valueFrom="-400.0"
+            android:valueTo="400.0"
+            android:stepSize="10.0"
+            android:value="0.0"
+            app:labelBehavior="withinBounds" /> <!-- Added for bubble tooltip -->
         
         <com.google.android.material.divider.MaterialDivider android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:layout_marginBottom="16dp"/>
 
@@ -111,7 +119,7 @@
         <TextView android:id="@+id/highPassFilterLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="听筒高通 (左): 50 Hz" android:textAppearance="?attr/textAppearanceLabelLarge" android:layout_marginTop="8dp"/>
         <com.google.android.material.slider.Slider android:id="@+id/highPassFilterSlider" android:layout_width="match_parent" android:layout_height="wrap_content" android:valueFrom="50.0" android:valueTo="15000.0" android:stepSize="50.0"/>
         
-        <TextView android:id="@+id/lowPassFilterLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="扬声器低通 (左): 15000 Hz" android:textAppearance="?attr/textAppearanceLabelLarge" android:layout_marginTop="8dp"/>
+        <TextView android:id="@+id/lowPassFilterLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="扬声器低通 (右): 15000 Hz" android:textAppearance="?attr/textAppearanceLabelLarge" android:layout_marginTop="8dp"/>
         <com.google.android.material.slider.Slider android:id="@+id/lowPassFilterSlider" android:layout_width="match_parent" android:layout_height="wrap_content" android:valueFrom="50.0" android:valueTo="15000.0" android:stepSize="50.0"/>
     </LinearLayout>
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
