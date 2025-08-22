@@ -30,6 +30,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.slider.Slider;
 
 import java.util.ArrayList;
@@ -46,17 +47,15 @@ public class MainActivity extends AppCompatActivity {
     private AudioListAdapter adapter;
 
     private TextView statusTextView, currentTimeTextView, totalTimeTextView;
+    private TextView earpieceGainLabel, speakerGainLabel, delayLabel, highPassFilterLabel, lowPassFilterLabel;
     private Slider playbackSlider, earpieceGainSlider, speakerGainSlider, delaySlider, highPassFilterSlider, lowPassFilterSlider;
     private FloatingActionButton fabPlayPause;
     private BottomSheetBehavior<LinearLayout> bottomSheetBehavior;
+    private MaterialSwitch filterLockSwitch;
 
     private final ActivityResultLauncher<String> requestPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
-                if (isGranted) {
-                    loadAudioFiles();
-                } else {
-                    Toast.makeText(this, "需要权限才能加载音频文件", Toast.LENGTH_LONG).show();
-                }
+                if (isGranted) loadAudioFiles(); else Toast.makeText(this, "需要权限才能加载音频文件", Toast.LENGTH_LONG).show();
             });
 
     private final BroadcastReceiver updateReceiver = new BroadcastReceiver() {
@@ -103,109 +102,103 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout bottomSheet = findViewById(R.id.bottom_sheet);
         bottomSheetBehavior = BottomSheetBehavior.from(bottomSheet);
 
+        earpieceGainLabel = findViewById(R.id.earpieceGainLabel);
+        speakerGainLabel = findViewById(R.id.speakerGainLabel);
+        delayLabel = findViewById(R.id.delayLabel);
+        highPassFilterLabel = findViewById(R.id.highPassFilterLabel);
+        lowPassFilterLabel = findViewById(R.id.lowPassFilterLabel);
+        
         earpieceGainSlider = findViewById(R.id.earpieceGainSlider);
         speakerGainSlider = findViewById(R.id.speakerGainSlider);
         delaySlider = findViewById(R.id.delaySlider);
         highPassFilterSlider = findViewById(R.id.highPassFilterSlider);
         lowPassFilterSlider = findViewById(R.id.lowPassFilterSlider);
+        filterLockSwitch = findViewById(R.id.filterLockSwitch);
 
         RecyclerView recyclerView = findViewById(R.id.recyclerView);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
-        adapter = new AudioListAdapter(audioList, item -> {
-            if (isBound) mediaService.playSongAtIndex(audioList.indexOf(item));
-        });
+        adapter = new AudioListAdapter(audioList, item -> { if (isBound) mediaService.playSongAtIndex(audioList.indexOf(item)); });
         recyclerView.setAdapter(adapter);
 
-        fabPlayPause.setOnClickListener(v -> {
-            if (isBound) mediaService.togglePlayPause();
-        });
+        fabPlayPause.setOnClickListener(v -> { if (isBound) mediaService.togglePlayPause(); });
 
         setupSliderListeners();
     }
 
     private void setupSliderListeners() {
-        playbackSlider.addOnChangeListener((slider, value, fromUser) -> {
-            if (fromUser && isBound) mediaService.seekTo((int) value);
+        playbackSlider.addOnChangeListener((s, v, u) -> { if (u && isBound) mediaService.seekTo((int) v); });
+        
+        earpieceGainSlider.addOnChangeListener((s, v, u) -> {
+            earpieceGainLabel.setText(String.format(Locale.US, "听筒增益: %.1f dB", v));
+            if (u && isBound) { mediaService.setEarpieceGain(v); saveFloat("earpieceGain", v); }
         });
-        earpieceGainSlider.addOnChangeListener((slider, value, fromUser) -> {
-            if (isBound) mediaService.setEarpieceGain(value);
-            saveFloat("earpieceGain", value);
+        speakerGainSlider.addOnChangeListener((s, v, u) -> {
+            speakerGainLabel.setText(String.format(Locale.US, "扬声器增益: %.1f dB", v));
+            if (u && isBound) { mediaService.setSpeakerGain(v); saveFloat("speakerGain", v); }
         });
-        speakerGainSlider.addOnChangeListener((slider, value, fromUser) -> {
-            if (isBound) mediaService.setSpeakerGain(value);
-            saveFloat("speakerGain", value);
+        delaySlider.addOnChangeListener((s, v, u) -> {
+            delayLabel.setText(String.format(Locale.US, "同步延迟: %d ms", (int)v));
+            if (u && isBound) { mediaService.setSyncDelay((int) v); saveInt("syncDelay", (int) v); }
         });
-        delaySlider.addOnChangeListener((slider, value, fromUser) -> {
-            if (isBound) mediaService.setEarpieceDelay((int) value);
-            saveInt("earpieceDelay", (int) value);
+
+        highPassFilterSlider.addOnChangeListener((s, v, u) -> {
+            highPassFilterLabel.setText(String.format(Locale.US, "听筒高通 (左): %d Hz", (int)v));
+            if (u) {
+                if (filterLockSwitch.isChecked()) lowPassFilterSlider.setValue(v);
+                if (isBound) { mediaService.updateHighPassFilter((int) v); saveInt("highPass", (int) v); }
+            }
         });
-        highPassFilterSlider.addOnChangeListener((slider, value, fromUser) -> {
-            if (isBound) mediaService.updateHighPassFilter((int) value);
-            saveInt("highPass", (int) value);
-        });
-        lowPassFilterSlider.addOnChangeListener((slider, value, fromUser) -> {
-            if (isBound) mediaService.updateLowPassFilter((int) value);
-            saveInt("lowPass", (int) value);
+        lowPassFilterSlider.addOnChangeListener((s, v, u) -> {
+            lowPassFilterLabel.setText(String.format(Locale.US, "扬声器低通 (左): %d Hz", (int)v));
+            if (u) {
+                if (filterLockSwitch.isChecked()) highPassFilterSlider.setValue(v);
+                if (isBound) { mediaService.updateLowPassFilter((int) v); saveInt("lowPass", (int) v); }
+            }
         });
     }
 
     private void loadSettings() {
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
-        earpieceGainSlider.setValue(prefs.getFloat("earpieceGain", 1.0f));
-        speakerGainSlider.setValue(prefs.getFloat("speakerGain", 1.0f));
-        delaySlider.setValue(prefs.getInt("earpieceDelay", 0));
-        highPassFilterSlider.setValue(prefs.getInt("highPass", 0));
-        lowPassFilterSlider.setValue(prefs.getInt("lowPass", 0));
-        
+        float earpieceGain = prefs.getFloat("earpieceGain", 0.0f);
+        float speakerGain = prefs.getFloat("speakerGain", 0.0f);
+        int syncDelay = prefs.getInt("syncDelay", 0);
+        int highPass = prefs.getInt("highPass", 50);
+        int lowPass = prefs.getInt("lowPass", 15000);
+
+        earpieceGainSlider.setValue(earpieceGain);
+        speakerGainSlider.setValue(speakerGain);
+        delaySlider.setValue(syncDelay);
+        highPassFilterSlider.setValue(highPass);
+        lowPassFilterSlider.setValue(lowPass);
+
         if(isBound) {
-            mediaService.setEarpieceGain(earpieceGainSlider.getValue());
-            mediaService.setSpeakerGain(speakerGainSlider.getValue());
-            mediaService.setEarpieceDelay((int)delaySlider.getValue());
-            mediaService.updateHighPassFilter((int)highPassFilterSlider.getValue());
-            mediaService.updateLowPassFilter((int)lowPassFilterSlider.getValue());
+            mediaService.setEarpieceGain(earpieceGain);
+            mediaService.setSpeakerGain(speakerGain);
+            mediaService.setSyncDelay(syncDelay);
+            mediaService.updateHighPassFilter(highPass);
+            mediaService.updateLowPassFilter(lowPass);
         }
     }
 
-    private void saveFloat(String key, float value) {
-        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putFloat(key, value).apply();
-    }
-
-    private void saveInt(String key, int value) {
-        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putInt(key, value).apply();
-    }
+    private void saveFloat(String key, float value) { getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putFloat(key, value).apply(); }
+    private void saveInt(String key, int value) { getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putInt(key, value).apply(); }
     
     private void checkAndRequestPermission() {
-        String permission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ?
-                Manifest.permission.READ_MEDIA_AUDIO : Manifest.permission.READ_EXTERNAL_STORAGE;
-        if (ActivityCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED) {
-            loadAudioFiles();
-        } else {
-            requestPermissionLauncher.launch(permission);
-        }
+        String permission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ? Manifest.permission.READ_MEDIA_AUDIO : Manifest.permission.READ_EXTERNAL_STORAGE;
+        if (ActivityCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED) loadAudioFiles(); else requestPermissionLauncher.launch(permission);
     }
 
     private void loadAudioFiles() {
         audioList.clear();
         String[] projection = {MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.DURATION};
         try (Cursor cursor = getContentResolver().query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, projection, null, null, MediaStore.Audio.Media.TITLE + " ASC")) {
-            int idColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID);
-            int titleColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE);
-            int artistColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST);
-            int durationColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION);
-
+            int idCol=cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID), titleCol=cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE), artistCol=cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST), durCol=cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION);
             while (cursor.moveToNext()) {
-                long id = cursor.getLong(idColumn);
-                String title = cursor.getString(titleColumn);
-                String artist = cursor.getString(artistColumn);
-                int duration = cursor.getInt(durationColumn);
-                Uri contentUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id);
-                audioList.add(new AudioItem(contentUri, title, artist, duration));
+                audioList.add(new AudioItem(ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, cursor.getLong(idCol)), cursor.getString(titleCol), cursor.getString(artistCol), cursor.getInt(durCol)));
             }
         }
         adapter.notifyDataSetChanged();
-        if (isBound) {
-            mediaService.setAudioList(audioList);
-        }
+        if (isBound) mediaService.setAudioList(audioList);
     }
     
     private void updateUI(boolean isPlaying, int currentIndex, int currentPosition, int duration) {
@@ -214,14 +207,13 @@ public class MainActivity extends AppCompatActivity {
             statusTextView.setText(audioList.get(currentIndex).getTitle());
         }
         playbackSlider.setValueTo(duration);
+        playbackSlider.setStepSize(1000f);
         playbackSlider.setValue(currentPosition);
         currentTimeTextView.setText(formatTime(currentPosition));
         totalTimeTextView.setText(formatTime(duration));
     }
     
-    private String formatTime(int millis) {
-        return String.format(Locale.US, "%d:%02d", TimeUnit.MILLISECONDS.toMinutes(millis), TimeUnit.MILLISECONDS.toSeconds(millis) % 60);
-    }
+    private String formatTime(int millis) { return String.format(Locale.US, "%d:%02d", TimeUnit.MILLISECONDS.toMinutes(millis), TimeUnit.MILLISECONDS.toSeconds(millis) % 60); }
     
     @Override
     protected void onStart() {
@@ -238,10 +230,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (isBound) {
-            unbindService(connection);
-            isBound = false;
-        }
+        if (isBound) { unbindService(connection); isBound = false; }
     }
     
     private final ServiceConnection connection = new ServiceConnection() {
@@ -254,8 +243,6 @@ public class MainActivity extends AppCompatActivity {
             loadSettings();
         }
         @Override
-        public void onServiceDisconnected(ComponentName name) {
-            isBound = false;
-        }
+        public void onServiceDisconnected(ComponentName name) { isBound = false; }
     };
 }

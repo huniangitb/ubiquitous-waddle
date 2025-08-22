@@ -37,16 +37,13 @@ public class MediaPlaybackService extends Service {
     private int currentIndex = -1;
     private boolean isPlaying = false;
     private int playersPreparedCount = 0;
-    private int earpieceDelayMs = 0;
-    private float earpieceGain = 1.0f, speakerGain = 1.0f;
+    private int syncDelayMs = 0;
+    private float earpieceDb = 0.0f, speakerDb = 0.0f;
 
     public class LocalBinder extends Binder { MediaPlaybackService getService() { return MediaPlaybackService.this; } }
 
-    @Override
-    public IBinder onBind(Intent intent) { return binder; }
-    
-    @Override
-    public void onCreate() { super.onCreate(); createNotificationChannel(); }
+    @Override public IBinder onBind(Intent intent) { return binder; }
+    @Override public void onCreate() { super.onCreate(); createNotificationChannel(); }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -57,7 +54,7 @@ public class MediaPlaybackService extends Service {
                 case ACTION_PREV: playPrev(); break;
             }
         }
-        return START_STICKY;
+        return START_NOT_STICKY;
     }
     
     public void setAudioList(List<AudioItem> list) { this.audioList = list; }
@@ -94,11 +91,12 @@ public class MediaPlaybackService extends Service {
     
     private void playAudio() {
         if (!areAllPlayersReady()) return;
-        speakerPlayerRight.start();
-        handler.postDelayed(() -> {
-            if (speakerPlayerLeft != null) speakerPlayerLeft.start();
-            if (earpiecePlayer != null) earpiecePlayer.start();
-        }, earpieceDelayMs);
+        int earpieceDelay = Math.max(0, syncDelayMs);
+        int speakerDelay = Math.max(0, -syncDelayMs);
+
+        handler.postDelayed(() -> { if(earpiecePlayer != null) earpiecePlayer.start(); }, earpieceDelay);
+        handler.postDelayed(() -> { if(speakerPlayerLeft != null) speakerPlayerLeft.start(); if(speakerPlayerRight != null) speakerPlayerRight.start(); }, speakerDelay);
+        
         isPlaying = true;
         updateNotification();
         handler.post(updateSeekBarRunnable);
@@ -106,15 +104,16 @@ public class MediaPlaybackService extends Service {
     
     private void resumeAudio() {
         if (!areAllPlayersReady() || isPlaying) return;
-        getAllPlayers().forEach(MediaPlayer::start);
-        isPlaying = true; updateNotification(); handler.post(updateSeekBarRunnable);
+        playAudio(); // Re-trigger delay logic on resume
     }
 
     private void pauseAudio() {
         if (!areAllPlayersReady() || !isPlaying) return;
-        handler.removeCallbacks(updateSeekBarRunnable);
+        handler.removeCallbacksAndMessages(null);
         getAllPlayers().forEach(p -> { if (p.isPlaying()) p.pause(); });
-        isPlaying = false; updateNotification();
+        isPlaying = false; 
+        updateNotification();
+        broadcastUpdate();
     }
 
     public void seekTo(int position) { getAllPlayers().forEach(p -> p.seekTo(position)); }
@@ -122,15 +121,17 @@ public class MediaPlaybackService extends Service {
     private void playPrev() { if (audioList.isEmpty()) return; playSongAtIndex((currentIndex - 1 + audioList.size()) % audioList.size()); }
     private void checkCompletion() { if (isPlaying && !earpiecePlayer.isPlaying()) playNext(); }
 
-    public void setEarpieceDelay(int ms) { this.earpieceDelayMs = ms; }
-    public void setEarpieceGain(float gain) { this.earpieceGain = gain; applyGains(); }
-    public void setSpeakerGain(float gain) { this.speakerGain = gain; applyGains(); }
+    public void setSyncDelay(int ms) { this.syncDelayMs = ms; }
+    public void setEarpieceGain(float db) { this.earpieceDb = db; applyGains(); }
+    public void setSpeakerGain(float db) { this.speakerDb = db; applyGains(); }
     
     private void applyGains() {
         if (!areAllPlayersReady()) return;
-        earpiecePlayer.setVolume(earpieceGain, 0f);
-        speakerPlayerLeft.setVolume(speakerGain, 0f);
-        speakerPlayerRight.setVolume(0f, speakerGain);
+        float earpieceAmp = (float) Math.pow(10, earpieceDb / 20.0);
+        float speakerAmp = (float) Math.pow(10, speakerDb / 20.0);
+        earpiecePlayer.setVolume(earpieceAmp, 0f);
+        speakerPlayerLeft.setVolume(speakerAmp, 0f);
+        speakerPlayerRight.setVolume(0f, speakerAmp);
     }
     
     private void setupEqualizers() {
@@ -142,16 +143,16 @@ public class MediaPlaybackService extends Service {
         } catch (Exception ignored) {}
     }
 
-    public void updateHighPassFilter(int progress) {
+    public void updateHighPassFilter(int freqHz) {
         if (earpieceEqualizer == null) return;
-        int cutoffFrequency = progress * 1000;
+        int cutoffFrequency = freqHz * 1000;
         short minLevel = earpieceEqualizer.getBandLevelRange()[0];
         for (short i = 0; i < earpieceEqualizer.getNumberOfBands(); i++) { earpieceEqualizer.setBandLevel(i, earpieceEqualizer.getCenterFreq(i) < cutoffFrequency ? minLevel : (short) 0); }
     }
 
-    public void updateLowPassFilter(int progress) {
+    public void updateLowPassFilter(int freqHz) {
         if (speakerLpEqualizer == null) return;
-        int cutoffFrequency = progress * 1000;
+        int cutoffFrequency = freqHz * 1000;
         short minLevel = speakerLpEqualizer.getBandLevelRange()[0];
         for (short i = 0; i < speakerLpEqualizer.getNumberOfBands(); i++) { speakerLpEqualizer.setBandLevel(i, speakerLpEqualizer.getCenterFreq(i) > cutoffFrequency ? minLevel : (short) 0); }
     }
@@ -186,6 +187,7 @@ public class MediaPlaybackService extends Service {
                 .addAction(isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play, "Play/Pause", playPauseIntent)
                 .addAction(android.R.drawable.ic_media_next, "Next", nextIntent)
                 .setStyle(new androidx.media.app.NotificationCompat.MediaStyle().setShowActionsInCompactView(0, 1, 2))
+                .setOngoing(isPlaying)
                 .build();
         startForeground(NOTIFICATION_ID, notification);
     }
