@@ -8,9 +8,7 @@ import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.example.dualaudioplayer.databinding.ListItemAudioBinding
 
-class AudioListAdapter(
-    private val onItemClicked: (AudioItem) -> Unit
-) : ListAdapter<AudioItem, AudioListAdapter.AudioViewHolder>(AudioDiffCallback) {
+class AudioListAdapter(private val onItemClicked: (AudioItem) -> Unit) : ListAdapter<AudioItem, AudioListAdapter.AudioViewHolder>(AudioDiffCallback) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): AudioViewHolder {
         val binding = ListItemAudioBinding.inflate(LayoutInflater.from(parent.context), parent, false)
@@ -25,23 +23,16 @@ class AudioListAdapter(
         fun bind(item: AudioItem, onItemClicked: (AudioItem) -> Unit) {
             binding.titleTextView.text = item.title
             binding.artistTextView.text = item.artist
-            
-            // Use Coil to load album art asynchronously, preventing UI lag
             binding.albumArtImageView.load(item.albumArtUri) {
                 placeholder(android.R.drawable.ic_media_play)
                 error(android.R.drawable.ic_media_play)
             }
-            
             itemView.setOnClickListener { onItemClicked(item) }
         }
     }
 
     object AudioDiffCallback : DiffUtil.ItemCallback<AudioItem>() {
-        override fun areItemsTheSame(oldItem: AudioItem, newItem: AudioItem): Boolean {
-            return oldItem.uri == newItem.uri
-        }
-        override fun areContentsTheSame(oldItem: AudioItem, newItem: AudioItem): Boolean {
-            return oldItem == newItem
-        }
+        override fun areItemsTheSame(oldItem: AudioItem, newItem: AudioItem): Boolean = oldItem.uri == newItem.uri
+        override fun areContentsTheSame(oldItem: AudioItem, newItem: AudioItem): Boolean = oldItem == newItem
     }
 }

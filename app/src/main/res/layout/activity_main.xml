@@ -105,7 +105,7 @@
             android:valueTo="400.0"
             android:stepSize="10.0"
             android:value="0.0"
-            app:labelBehavior="withinBounds" /> <!-- Added for bubble tooltip -->
+            app:labelBehavior="withinBounds" />
         
         <com.google.android.material.divider.MaterialDivider android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:layout_marginBottom="16dp"/>
 

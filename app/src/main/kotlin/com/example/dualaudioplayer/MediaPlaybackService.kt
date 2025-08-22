@@ -39,7 +39,6 @@ class MediaPlaybackService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + serviceJob)
     private val handler = Handler(Looper.getMainLooper())
 
-    // Refactored to 2 players for clean channel separation
     private var earpiecePlayer: MediaPlayer? = null
     private var speakerPlayer: MediaPlayer? = null
 
@@ -76,9 +75,7 @@ class MediaPlaybackService : Service() {
         return START_NOT_STICKY
     }
 
-    fun setAudioList(list: List<AudioItem>) {
-        this.audioList = list
-    }
+    fun setAudioList(list: List<AudioItem>) { this.audioList = list }
 
     fun playSongAtIndex(index: Int) {
         if (index < 0 || index >= audioList.size) return
@@ -107,8 +104,7 @@ class MediaPlaybackService : Service() {
     @Synchronized
     private fun onPlayerPrepared() {
         playersPreparedCount++
-        if (playersPreparedCount == 2) { // Now waiting for 2 players
-            // Force Left channel to earpiece, Right channel to speaker
+        if (playersPreparedCount == 2) {
             earpiecePlayer?.setVolume(1.0f, 0.0f)
             speakerPlayer?.setVolume(0.0f, 1.0f)
             setupAudioEffects()
@@ -116,38 +112,24 @@ class MediaPlaybackService : Service() {
         }
     }
 
-    fun togglePlayPause() {
-        if (isPlaying) pauseAudio() else resumeAudio()
-    }
+    fun togglePlayPause() { if (isPlaying) pauseAudio() else resumeAudio() }
 
     private fun playAudio() {
         if (!areAllPlayersReady() || isPlaying) return
-        
         val earpieceDelay = max(0, syncDelayMs).toLong()
         val speakerDelay = max(0, -syncDelayMs).toLong()
-
-        serviceScope.launch {
-            delay(earpieceDelay)
-            earpiecePlayer?.start()
-        }
-        serviceScope.launch {
-            delay(speakerDelay)
-            speakerPlayer?.start()
-        }
-
+        serviceScope.launch { delay(earpieceDelay); earpiecePlayer?.start() }
+        serviceScope.launch { delay(speakerDelay); speakerPlayer?.start() }
         isPlaying = true
         updateNotification()
         handler.post(updateSeekBarRunnable)
     }
 
-    private fun resumeAudio() {
-        if (!areAllPlayersReady() || isPlaying) return
-        playAudio()
-    }
+    private fun resumeAudio() { if (areAllPlayersReady() && !isPlaying) playAudio() }
 
     private fun pauseAudio() {
         if (!areAllPlayersReady() || !isPlaying) return
-        serviceScope.coroutineContext.cancelChildren() // Cancel pending delays
+        serviceScope.coroutineContext.cancelChildren()
         handler.removeCallbacksAndMessages(null)
         getAllPlayers().forEach { it?.takeIf { it.isPlaying }?.pause() }
         isPlaying = false
@@ -155,49 +137,26 @@ class MediaPlaybackService : Service() {
         broadcastUpdate()
     }
 
-    fun seekTo(position: Int) {
-        getAllPlayers().forEach { it?.seekTo(position) }
-    }
-
-    private fun playNext() {
-        if (audioList.isEmpty()) return
-        playSongAtIndex((currentIndex + 1) % audioList.size)
-    }
-
-    private fun playPrev() {
-        if (audioList.isEmpty()) return
-        playSongAtIndex((currentIndex - 1 + audioList.size) % audioList.size)
-    }
-
-    private fun checkCompletion() {
-        if (isPlaying && earpiecePlayer?.isPlaying == false) {
-            playNext()
-        }
-    }
+    fun seekTo(position: Int) { getAllPlayers().forEach { it?.seekTo(position) } }
+    private fun playNext() { if (audioList.isNotEmpty()) playSongAtIndex((currentIndex + 1) % audioList.size) }
+    private fun playPrev() { if (audioList.isNotEmpty()) playSongAtIndex((currentIndex - 1 + audioList.size) % audioList.size) }
+    private fun checkCompletion() { if (isPlaying && earpiecePlayer?.isPlaying == false) playNext() }
 
     fun setSyncDelay(ms: Int) { this.syncDelayMs = ms }
-
-    fun setEarpieceGainDb(db: Float) {
-        earpieceEnhancer?.setTargetGain((db * 100).toInt())
-    }
-
-    fun setSpeakerGainDb(db: Float) {
-        speakerEnhancer?.setTargetGain((db * 100).toInt())
-    }
+    fun setEarpieceGainDb(db: Float) { earpieceEnhancer?.setTargetGain((db * 100).toInt()) }
+    fun setSpeakerGainDb(db: Float) { speakerEnhancer?.setTargetGain((db * 100).toInt()) }
 
     private fun setupAudioEffects() {
         try {
             earpiecePlayer?.audioSessionId?.let {
-                earpieceEqualizer = Equalizer(0, it).apply { isEnabled = true }
-                earpieceEnhancer = LoudnessEnhancer(it).apply { isEnabled = true }
+                earpieceEqualizer = Equalizer(0, it).apply { setEnabled(true) }
+                earpieceEnhancer = LoudnessEnhancer(it).apply { setEnabled(true) }
             }
             speakerPlayer?.audioSessionId?.let {
-                speakerEqualizer = Equalizer(0, it).apply { isEnabled = true }
-                speakerEnhancer = LoudnessEnhancer(it).apply { isEnabled = true }
+                speakerEqualizer = Equalizer(0, it).apply { setEnabled(true) }
+                speakerEnhancer = LoudnessEnhancer(it).apply { setEnabled(true) }
             }
-        } catch (e: Exception) {
-            // Ignore if effects fail to initialize
-        }
+        } catch (e: Exception) { /* Ignore */ }
     }
 
     fun updateHighPassFilter(freqHz: Int) {
@@ -205,7 +164,7 @@ class MediaPlaybackService : Service() {
             val cutoffFreqMilliHz = freqHz * 1000
             val minLevel = eq.bandLevelRange[0]
             for (i in 0 until eq.numberOfBands) {
-                eq.setBandLevel(i, if (eq.getCenterFreq(i) < cutoffFreqMilliHz) minLevel else 0)
+                eq.setBandLevel(i.toShort(), if (eq.getCenterFreq(i) < cutoffFreqMilliHz) minLevel else 0.toShort())
             }
         }
     }
@@ -215,7 +174,7 @@ class MediaPlaybackService : Service() {
             val cutoffFreqMilliHz = freqHz * 1000
             val minLevel = eq.bandLevelRange[0]
             for (i in 0 until eq.numberOfBands) {
-                eq.setBandLevel(i, if (eq.getCenterFreq(i) > cutoffFreqMilliHz) minLevel else 0)
+                eq.setBandLevel(i.toShort(), if (eq.getCenterFreq(i) > cutoffFreqMilliHz) minLevel else 0.toShort())
             }
         }
     }
@@ -243,32 +202,21 @@ class MediaPlaybackService : Service() {
     private fun updateNotification() {
         if (currentIndex !in audioList.indices) return
         val currentItem = audioList[currentIndex]
-
         val pendingIntentFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
         val playPauseIntent = PendingIntent.getService(this, 0, Intent(this, MediaPlaybackService::class.java).setAction(ACTION_PLAY_PAUSE), pendingIntentFlag)
         val nextIntent = PendingIntent.getService(this, 0, Intent(this, MediaPlaybackService::class.java).setAction(ACTION_NEXT), pendingIntentFlag)
         val prevIntent = PendingIntent.getService(this, 0, Intent(this, MediaPlaybackService::class.java).setAction(ACTION_PREV), pendingIntentFlag)
-
-        val playPauseAction = Notification.Action.Builder(
-            if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
-            "Play/Pause", playPauseIntent
-        ).build()
+        val playPauseAction = Notification.Action.Builder(if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play, "Play/Pause", playPauseIntent).build()
 
         val builder = Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle(currentItem.title)
-            .setContentText(currentItem.artist)
-            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setContentTitle(currentItem.title).setContentText(currentItem.artist).setSmallIcon(android.R.drawable.ic_media_play)
             .addAction(Notification.Action.Builder(android.R.drawable.ic_media_previous, "Previous", prevIntent).build())
             .addAction(playPauseAction)
             .addAction(Notification.Action.Builder(android.R.drawable.ic_media_next, "Next", nextIntent).build())
-            .setStyle(Notification.MediaStyle().setShowActionsInCompactView(0, 1, 2))
-            .setOngoing(isPlaying)
-
+            .setStyle(Notification.MediaStyle().setShowActionsInCompactView(0, 1, 2)).setOngoing(isPlaying)
         try {
-            val albumArt: Bitmap = MediaStore.Images.Media.getBitmap(this.contentResolver, currentItem.albumArtUri)
-            builder.setLargeIcon(albumArt)
+            builder.setLargeIcon(MediaStore.Images.Media.getBitmap(this.contentResolver, currentItem.albumArtUri))
         } catch (e: IOException) { /* ignore */ }
-
         startForeground(NOTIFICATION_ID, builder.build())
     }
 
@@ -283,27 +231,13 @@ class MediaPlaybackService : Service() {
         handler.removeCallbacksAndMessages(null)
         serviceScope.coroutineContext.cancelChildren()
         getAllPlayers().forEach { it?.release() }
-        earpiecePlayer = null
-        speakerPlayer = null
-        
-        earpieceEqualizer?.release()
-        speakerEqualizer?.release()
-        earpieceEnhancer?.release()
-        speakerEnhancer?.release()
-        earpieceEqualizer = null
-        speakerEqualizer = null
-        earpieceEnhancer = null
-        speakerEnhancer = null
-        
+        earpiecePlayer = null; speakerPlayer = null
+        earpieceEqualizer?.release(); speakerEqualizer?.release(); earpieceEnhancer?.release(); speakerEnhancer?.release()
+        earpieceEqualizer = null; speakerEqualizer = null; earpieceEnhancer = null; speakerEnhancer = null
         isPlaying = false
     }
 
     private fun getAllPlayers() = listOf(earpiecePlayer, speakerPlayer)
     private fun areAllPlayersReady() = earpiecePlayer != null && speakerPlayer != null
-
-    override fun onDestroy() {
-        super.onDestroy()
-        releasePlayers()
-        serviceJob.cancel()
-    }
+    override fun onDestroy() { super.onDestroy(); releasePlayers(); serviceJob.cancel() }
 }
