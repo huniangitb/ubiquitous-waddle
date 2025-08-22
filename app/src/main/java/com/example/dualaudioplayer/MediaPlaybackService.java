@@ -179,9 +179,7 @@ public class MediaPlaybackService extends Service {
         PendingIntent prevIntent = PendingIntent.getService(this, 0, new Intent(this, MediaPlaybackService.class).setAction(ACTION_PREV), PendingIntent.FLAG_IMMUTABLE);
         
         Notification.Action playPauseAction = new Notification.Action.Builder(
-            isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play,
-            "Play/Pause",
-            playPauseIntent).build();
+            isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play, "Play/Pause", playPauseIntent).build();
 
         Notification notification = new Notification.Builder(this, CHANNEL_ID)
                 .setContentTitle(currentItem.getTitle())

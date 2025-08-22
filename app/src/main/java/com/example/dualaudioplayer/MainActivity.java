@@ -156,24 +156,33 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
+    
+    private float snapToStep(float value, float valueFrom, float stepSize) {
+        if (stepSize <= 0) return value;
+        return Math.round((value - valueFrom) / stepSize) * stepSize + valueFrom;
+    }
 
     private void loadSettings() {
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        
         float earpieceGain = prefs.getFloat("earpieceGain", 0.0f);
         float speakerGain = prefs.getFloat("speakerGain", 0.0f);
         int syncDelay = prefs.getInt("syncDelay", 0);
         int highPass = prefs.getInt("highPass", 50);
         int lowPass = prefs.getInt("lowPass", 15000);
 
-        earpieceGainSlider.setValue(earpieceGain);
-        speakerGainSlider.setValue(speakerGain);
+        float alignedEarpieceGain = snapToStep(earpieceGain, earpieceGainSlider.getValueFrom(), earpieceGainSlider.getStepSize());
+        float alignedSpeakerGain = snapToStep(speakerGain, speakerGainSlider.getValueFrom(), speakerGainSlider.getStepSize());
+
+        earpieceGainSlider.setValue(alignedEarpieceGain);
+        speakerGainSlider.setValue(alignedSpeakerGain);
         delaySlider.setValue(syncDelay);
         highPassFilterSlider.setValue(highPass);
         lowPassFilterSlider.setValue(lowPass);
 
         if(isBound) {
-            mediaService.setEarpieceGain(earpieceGain);
-            mediaService.setSpeakerGain(speakerGain);
+            mediaService.setEarpieceGain(alignedEarpieceGain);
+            mediaService.setSpeakerGain(alignedSpeakerGain);
             mediaService.setSyncDelay(syncDelay);
             mediaService.updateHighPassFilter(highPass);
             mediaService.updateLowPassFilter(lowPass);
