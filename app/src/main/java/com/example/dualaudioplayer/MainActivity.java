@@ -1,7 +1,6 @@
 package com.example.dualaudioplayer;
 
 import android.Manifest;
-import android.app.Activity;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -38,6 +37,7 @@ import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -56,7 +56,7 @@ import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
 // --- MainActivity (UI Controller) ---
-public class MainActivity extends Activity {
+public class MainActivity extends AppCompatActivity {
     private static final String PREFS_NAME = "DualAudioPrefs";
 
     private MediaPlaybackService mediaService;
@@ -176,7 +176,6 @@ public class MainActivity extends Activity {
         highPassFilterSlider.setValue(prefs.getInt("highPass", 0));
         lowPassFilterSlider.setValue(prefs.getInt("lowPass", 0));
         
-        // Apply settings to the service
         if(isBound) {
             mediaService.setEarpieceGain(earpieceGainSlider.getValue());
             mediaService.setSpeakerGain(speakerGainSlider.getValue());
@@ -240,7 +239,7 @@ public class MainActivity extends Activity {
     }
     
     private String formatTime(int millis) {
-        return String.format(Locale.US, "%02d:%02d", TimeUnit.MILLISECONDS.toMinutes(millis), TimeUnit.MILLISECONDS.toSeconds(millis) % 60);
+        return String.format(Locale.US, "%d:%02d", TimeUnit.MILLISECONDS.toMinutes(millis), TimeUnit.MILLISECONDS.toSeconds(millis) % 60);
     }
     
     @Override
@@ -288,11 +287,11 @@ class AudioItem {
     final int duration;
 
     AudioItem(Uri uri, String title, String artist, int duration) {
-        this.uri = uri;
-        this.title = title;
-        this.artist = artist;
-        this.duration = duration;
+        this.uri = uri; this.title = title; this.artist = artist; this.duration = duration;
     }
+    public Uri getUri() { return uri; }
+    public String getTitle() { return title; }
+    public String getArtist() { return artist; }
 }
 
 // --- AudioListAdapter for RecyclerView ---
@@ -309,8 +308,7 @@ class AudioListAdapter extends RecyclerView.Adapter<AudioListAdapter.ViewHolder>
 
     @Override
     public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
-        View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.list_item_audio, parent, false);
-        return new ViewHolder(view);
+        return new ViewHolder(LayoutInflater.from(parent.getContext()).inflate(R.layout.list_item_audio, parent, false));
     }
 
     @Override
@@ -319,20 +317,15 @@ class AudioListAdapter extends RecyclerView.Adapter<AudioListAdapter.ViewHolder>
     }
 
     @Override
-    public int getItemCount() {
-        return audioList.size();
-    }
+    public int getItemCount() { return audioList.size(); }
 
     static class ViewHolder extends RecyclerView.ViewHolder {
-        final TextView titleTextView;
-        final TextView artistTextView;
-
+        final TextView titleTextView; final TextView artistTextView;
         ViewHolder(View itemView) {
             super(itemView);
             titleTextView = itemView.findViewById(R.id.titleTextView);
             artistTextView = itemView.findViewById(R.id.artistTextView);
         }
-
         void bind(final AudioItem item, final OnItemClickListener listener) {
             titleTextView.setText(item.title);
             artistTextView.setText(item.artist);
@@ -344,9 +337,7 @@ class AudioListAdapter extends RecyclerView.Adapter<AudioListAdapter.ViewHolder>
 // --- MediaPlaybackService (Handles all background playback and notifications) ---
 class MediaPlaybackService extends Service {
     public static final String ACTION_UPDATE_UI = "com.example.dualaudioplayer.UPDATE_UI";
-    public static final String ACTION_PLAY_PAUSE = "ACTION_PLAY_PAUSE";
-    public static final String ACTION_NEXT = "ACTION_NEXT";
-    public static final String ACTION_PREV = "ACTION_PREV";
+    public static final String ACTION_PLAY_PAUSE = "ACTION_PLAY_PAUSE", ACTION_NEXT = "ACTION_NEXT", ACTION_PREV = "ACTION_PREV";
     private static final String CHANNEL_ID = "DualAudioChannel";
     private static final int NOTIFICATION_ID = 1;
 
@@ -362,18 +353,13 @@ class MediaPlaybackService extends Service {
     private int earpieceDelayMs = 0;
     private float earpieceGain = 1.0f, speakerGain = 1.0f;
 
-    public class LocalBinder extends Binder {
-        MediaPlaybackService getService() { return MediaPlaybackService.this; }
-    }
+    public class LocalBinder extends Binder { MediaPlaybackService getService() { return MediaPlaybackService.this; } }
 
     @Override
     public IBinder onBind(Intent intent) { return binder; }
     
     @Override
-    public void onCreate() {
-        super.onCreate();
-        createNotificationChannel();
-    }
+    public void onCreate() { super.onCreate(); createNotificationChannel(); }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -399,9 +385,7 @@ class MediaPlaybackService extends Service {
             earpiecePlayer = createPlayer(uri, AudioAttributes.USAGE_VOICE_COMMUNICATION);
             speakerPlayerLeft = createPlayer(uri, AudioAttributes.USAGE_MEDIA);
             speakerPlayerRight = createPlayer(uri, AudioAttributes.USAGE_MEDIA);
-        } catch (IOException e) {
-            Toast.makeText(this, "无法播放文件", Toast.LENGTH_SHORT).show();
-        }
+        } catch (IOException e) { Toast.makeText(this, "无法播放文件", Toast.LENGTH_SHORT).show(); }
     }
 
     private MediaPlayer createPlayer(Uri uri, int usage) throws IOException {
@@ -416,16 +400,10 @@ class MediaPlaybackService extends Service {
     
     private synchronized void onPlayerPrepared() {
         playersPreparedCount++;
-        if (playersPreparedCount == 3) {
-            applyGains();
-            setupEqualizers();
-            playAudio();
-        }
+        if (playersPreparedCount == 3) { applyGains(); setupEqualizers(); playAudio(); }
     }
 
-    public void togglePlayPause() {
-        if (isPlaying) pauseAudio(); else resumeAudio();
-    }
+    public void togglePlayPause() { if (isPlaying) pauseAudio(); else resumeAudio(); }
     
     private void playAudio() {
         if (!areAllPlayersReady()) return;
@@ -442,42 +420,21 @@ class MediaPlaybackService extends Service {
     private void resumeAudio() {
         if (!areAllPlayersReady() || isPlaying) return;
         getAllPlayers().forEach(MediaPlayer::start);
-        isPlaying = true;
-        updateNotification();
-        handler.post(updateSeekBarRunnable);
+        isPlaying = true; updateNotification(); handler.post(updateSeekBarRunnable);
     }
 
     private void pauseAudio() {
         if (!areAllPlayersReady() || !isPlaying) return;
         handler.removeCallbacks(updateSeekBarRunnable);
         getAllPlayers().forEach(p -> { if (p.isPlaying()) p.pause(); });
-        isPlaying = false;
-        updateNotification();
+        isPlaying = false; updateNotification();
     }
 
-    public void seekTo(int position) {
-        getAllPlayers().forEach(p -> p.seekTo(position));
-    }
+    public void seekTo(int position) { getAllPlayers().forEach(p -> p.seekTo(position)); }
+    private void playNext() { if (audioList.isEmpty()) return; playSongAtIndex((currentIndex + 1) % audioList.size()); }
+    private void playPrev() { if (audioList.isEmpty()) return; playSongAtIndex((currentIndex - 1 + audioList.size()) % audioList.size()); }
+    private void checkCompletion() { if (isPlaying && !earpiecePlayer.isPlaying()) playNext(); }
 
-    private void playNext() {
-        if (audioList.isEmpty()) return;
-        int nextIndex = (currentIndex + 1) % audioList.size();
-        playSongAtIndex(nextIndex);
-    }
-    
-    private void playPrev() {
-        if (audioList.isEmpty()) return;
-        int prevIndex = (currentIndex - 1 + audioList.size()) % audioList.size();
-        playSongAtIndex(prevIndex);
-    }
-
-    private void checkCompletion() {
-        if (isPlaying && !earpiecePlayer.isPlaying()) {
-            playNext();
-        }
-    }
-
-    // --- Settings ---
     public void setEarpieceDelay(int ms) { this.earpieceDelayMs = ms; }
     public void setEarpieceGain(float gain) { this.earpieceGain = gain; applyGains(); }
     public void setSpeakerGain(float gain) { this.speakerGain = gain; applyGains(); }
@@ -502,29 +459,18 @@ class MediaPlaybackService extends Service {
         if (earpieceEqualizer == null) return;
         int cutoffFrequency = progress * 1000;
         short minLevel = earpieceEqualizer.getBandLevelRange()[0];
-        for (short i = 0; i < earpieceEqualizer.getNumberOfBands(); i++) {
-            earpieceEqualizer.setBandLevel(i, earpieceEqualizer.getCenterFreq(i) < cutoffFrequency ? minLevel : (short) 0);
-        }
+        for (short i = 0; i < earpieceEqualizer.getNumberOfBands(); i++) { earpieceEqualizer.setBandLevel(i, earpieceEqualizer.getCenterFreq(i) < cutoffFrequency ? minLevel : (short) 0); }
     }
 
     public void updateLowPassFilter(int progress) {
         if (speakerLpEqualizer == null) return;
         int cutoffFrequency = progress * 1000;
         short minLevel = speakerLpEqualizer.getBandLevelRange()[0];
-        for (short i = 0; i < speakerLpEqualizer.getNumberOfBands(); i++) {
-            speakerLpEqualizer.setBandLevel(i, speakerLpEqualizer.getCenterFreq(i) > cutoffFrequency ? minLevel : (short) 0);
-        }
+        for (short i = 0; i < speakerLpEqualizer.getNumberOfBands(); i++) { speakerLpEqualizer.setBandLevel(i, speakerLpEqualizer.getCenterFreq(i) > cutoffFrequency ? minLevel : (short) 0); }
     }
 
-    // --- Notification and UI Update ---
     private final Runnable updateSeekBarRunnable = new Runnable() {
-        @Override
-        public void run() {
-            if (isPlaying && areAllPlayersReady()) {
-                broadcastUpdate();
-                handler.postDelayed(this, 1000);
-            }
-        }
+        @Override public void run() { if (isPlaying && areAllPlayersReady()) { broadcastUpdate(); handler.postDelayed(this, 1000); } }
     };
 
     private void broadcastUpdate() {
@@ -574,16 +520,9 @@ class MediaPlaybackService extends Service {
         isPlaying = false;
     }
 
-    private List<MediaPlayer> getAllPlayers() {
-        return Arrays.asList(earpiecePlayer, speakerPlayerLeft, speakerPlayerRight);
-    }
-    private boolean areAllPlayersReady() {
-        return earpiecePlayer != null && speakerPlayerLeft != null && speakerPlayerRight != null;
-    }
+    private List<MediaPlayer> getAllPlayers() { return Arrays.asList(earpiecePlayer, speakerPlayerLeft, speakerPlayerRight); }
+    private boolean areAllPlayersReady() { return earpiecePlayer != null && speakerPlayerLeft != null && speakerPlayerRight != null; }
     
     @Override
-    public void onDestroy() {
-        super.onDestroy();
-        releasePlayers();
-    }
+    public void onDestroy() { super.onDestroy(); releasePlayers(); }
 }
