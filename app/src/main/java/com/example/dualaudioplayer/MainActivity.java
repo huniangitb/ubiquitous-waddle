@@ -126,7 +126,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupSliderListeners() {
-        playbackSlider.addOnChangeListener((s, v, u) -> { if (u && isBound) mediaService.seekTo((int) v); });
+        playbackSlider.addOnChangeListener((s, v, u) -> {
+            if (u && isBound) mediaService.seekTo((int) (v * 1000));
+        });
         
         earpieceGainSlider.addOnChangeListener((s, v, u) -> {
             earpieceGainLabel.setText(String.format(Locale.US, "听筒增益: %.1f dB", v));
@@ -215,9 +217,14 @@ public class MainActivity extends AppCompatActivity {
         if (currentIndex != -1 && currentIndex < audioList.size()) {
             statusTextView.setText(audioList.get(currentIndex).getTitle());
         }
-        playbackSlider.setValueTo(duration);
-        playbackSlider.setStepSize(1000f);
-        playbackSlider.setValue(currentPosition);
+        
+        // Convert to seconds for the slider
+        int durationInSeconds = duration / 1000;
+        int currentPositionInSeconds = currentPosition / 1000;
+
+        playbackSlider.setValueTo(durationInSeconds);
+        playbackSlider.setValue(currentPositionInSeconds);
+        
         currentTimeTextView.setText(formatTime(currentPosition));
         totalTimeTextView.setText(formatTime(duration));
     }
