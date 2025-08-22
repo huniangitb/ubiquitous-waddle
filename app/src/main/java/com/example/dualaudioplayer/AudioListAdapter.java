@@ -3,6 +3,7 @@ package com.example.dualaudioplayer;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.TextView;
 import androidx.recyclerview.widget.RecyclerView;
 import java.util.List;
@@ -32,15 +33,24 @@ public class AudioListAdapter extends RecyclerView.Adapter<AudioListAdapter.View
     public int getItemCount() { return audioList.size(); }
 
     public static class ViewHolder extends RecyclerView.ViewHolder {
-        final TextView titleTextView; final TextView artistTextView;
+        final TextView titleTextView;
+        final TextView artistTextView;
+        final ImageView albumArtImageView;
+        
         ViewHolder(View itemView) {
             super(itemView);
             titleTextView = itemView.findViewById(R.id.titleTextView);
             artistTextView = itemView.findViewById(R.id.artistTextView);
+            albumArtImageView = itemView.findViewById(R.id.albumArtImageView);
         }
         void bind(final AudioItem item, final OnItemClickListener listener) {
             titleTextView.setText(item.title);
             artistTextView.setText(item.artist);
+            if (item.getAlbumArtUri() != null) {
+                albumArtImageView.setImageURI(item.getAlbumArtUri());
+            } else {
+                albumArtImageView.setImageResource(android.R.drawable.ic_media_play);
+            }
             itemView.setOnClickListener(v -> listener.onItemClick(item));
         }
     }

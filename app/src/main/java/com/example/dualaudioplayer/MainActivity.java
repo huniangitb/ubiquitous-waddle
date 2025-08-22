@@ -126,20 +126,20 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupSliderListeners() {
-        playbackSlider.addOnChangeListener((s, v, u) -> {
-            if (u && isBound) mediaService.seekTo((int) (v * 1000));
-        });
+        playbackSlider.addOnChangeListener((s, v, u) -> { if (u && isBound) mediaService.seekTo((int) (v * 1000)); });
         
         earpieceGainSlider.addOnChangeListener((s, v, u) -> {
             earpieceGainLabel.setText(String.format(Locale.US, "听筒增益: %.1f dB", v));
-            if (u && isBound) { mediaService.setEarpieceGain(v); saveFloat("earpieceGain", v); }
+            if (u && isBound) { mediaService.setEarpieceGainDb(v); saveFloat("earpieceGain", v); }
         });
         speakerGainSlider.addOnChangeListener((s, v, u) -> {
             speakerGainLabel.setText(String.format(Locale.US, "扬声器增益: %.1f dB", v));
-            if (u && isBound) { mediaService.setSpeakerGain(v); saveFloat("speakerGain", v); }
+            if (u && isBound) { mediaService.setSpeakerGainDb(v); saveFloat("speakerGain", v); }
         });
         delaySlider.addOnChangeListener((s, v, u) -> {
-            delayLabel.setText(String.format(Locale.US, "同步延迟: %d ms", (int)v));
+            String label = "同步延迟: %d ms (%s)";
+            String target = v == 0 ? "无" : (v > 0 ? "听筒" : "扬声器");
+            delayLabel.setText(String.format(Locale.US, label, (int)Math.abs(v), target));
             if (u && isBound) { mediaService.setSyncDelay((int) v); saveInt("syncDelay", (int) v); }
         });
 
@@ -183,8 +183,8 @@ public class MainActivity extends AppCompatActivity {
         lowPassFilterSlider.setValue(lowPass);
 
         if(isBound) {
-            mediaService.setEarpieceGain(alignedEarpieceGain);
-            mediaService.setSpeakerGain(alignedSpeakerGain);
+            mediaService.setEarpieceGainDb(alignedEarpieceGain);
+            mediaService.setSpeakerGainDb(alignedSpeakerGain);
             mediaService.setSyncDelay(syncDelay);
             mediaService.updateHighPassFilter(highPass);
             mediaService.updateLowPassFilter(lowPass);
@@ -201,11 +201,12 @@ public class MainActivity extends AppCompatActivity {
 
     private void loadAudioFiles() {
         audioList.clear();
-        String[] projection = {MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.DURATION};
+        String[] projection = {MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.ALBUM_ID};
         try (Cursor cursor = getContentResolver().query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, projection, null, null, MediaStore.Audio.Media.TITLE + " ASC")) {
-            int idCol=cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID), titleCol=cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE), artistCol=cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST), durCol=cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION);
+            int idCol=cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID), titleCol=cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE), artistCol=cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST), durCol=cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION), albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID);
             while (cursor.moveToNext()) {
-                audioList.add(new AudioItem(ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, cursor.getLong(idCol)), cursor.getString(titleCol), cursor.getString(artistCol), cursor.getInt(durCol)));
+                Uri albumArtUri = ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), cursor.getLong(albumIdCol));
+                audioList.add(new AudioItem(ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, cursor.getLong(idCol)), cursor.getString(titleCol), cursor.getString(artistCol), cursor.getInt(durCol), albumArtUri));
             }
         }
         adapter.notifyDataSetChanged();
@@ -218,8 +219,7 @@ public class MainActivity extends AppCompatActivity {
             statusTextView.setText(audioList.get(currentIndex).getTitle());
         }
         
-        // Convert to seconds for the slider
-        int durationInSeconds = duration / 1000;
+        int durationInSeconds = duration > 0 ? duration / 1000 : 100;
         int currentPositionInSeconds = currentPosition / 1000;
 
         playbackSlider.setValueTo(durationInSeconds);

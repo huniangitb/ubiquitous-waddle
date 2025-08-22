@@ -6,15 +6,18 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.media.AudioAttributes;
 import android.media.MediaPlayer;
 import android.media.audiofx.Equalizer;
+import android.media.audiofx.LoudnessEnhancer;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.provider.MediaStore;
 import android.widget.Toast;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -30,6 +33,8 @@ public class MediaPlaybackService extends Service {
     private final IBinder binder = new LocalBinder();
     private MediaPlayer earpiecePlayer, speakerPlayerLeft, speakerPlayerRight;
     private Equalizer earpieceEqualizer, speakerLpEqualizer;
+    private LoudnessEnhancer earpieceEnhancer, speakerLeftEnhancer, speakerRightEnhancer;
+    
     private final Handler handler = new Handler(Looper.getMainLooper());
     
     private List<AudioItem> audioList = new ArrayList<>();
@@ -37,7 +42,6 @@ public class MediaPlaybackService extends Service {
     private boolean isPlaying = false;
     private int playersPreparedCount = 0;
     private int syncDelayMs = 0;
-    private float earpieceDb = 0.0f, speakerDb = 0.0f;
 
     public class LocalBinder extends Binder { MediaPlaybackService getService() { return MediaPlaybackService.this; } }
 
@@ -83,7 +87,13 @@ public class MediaPlaybackService extends Service {
     
     private synchronized void onPlayerPrepared() {
         playersPreparedCount++;
-        if (playersPreparedCount == 3) { applyGains(); setupEqualizers(); playAudio(); }
+        if (playersPreparedCount == 3) {
+            earpiecePlayer.setVolume(1.0f, 0.0f);
+            speakerPlayerLeft.setVolume(1.0f, 0.0f);
+            speakerPlayerRight.setVolume(0.0f, 1.0f);
+            setupAudioEffects();
+            playAudio();
+        }
     }
 
     public void togglePlayPause() { if (isPlaying) pauseAudio(); else resumeAudio(); }
@@ -118,27 +128,32 @@ public class MediaPlaybackService extends Service {
     public void seekTo(int position) { getAllPlayers().forEach(p -> p.seekTo(position)); }
     private void playNext() { if (audioList.isEmpty()) return; playSongAtIndex((currentIndex + 1) % audioList.size()); }
     private void playPrev() { if (audioList.isEmpty()) return; playSongAtIndex((currentIndex - 1 + audioList.size()) % audioList.size()); }
-    private void checkCompletion() { if (isPlaying && !earpiecePlayer.isPlaying()) playNext(); }
+    private void checkCompletion() { if (isPlaying && earpiecePlayer != null && !earpiecePlayer.isPlaying()) playNext(); }
 
     public void setSyncDelay(int ms) { this.syncDelayMs = ms; }
-    public void setEarpieceGain(float db) { this.earpieceDb = db; applyGains(); }
-    public void setSpeakerGain(float db) { this.speakerDb = db; applyGains(); }
     
-    private void applyGains() {
-        if (!areAllPlayersReady()) return;
-        float earpieceAmp = (float) Math.pow(10, earpieceDb / 20.0);
-        float speakerAmp = (float) Math.pow(10, speakerDb / 20.0);
-        earpiecePlayer.setVolume(earpieceAmp, 0f);
-        speakerPlayerLeft.setVolume(speakerAmp, 0f);
-        speakerPlayerRight.setVolume(0f, speakerAmp);
+    public void setEarpieceGainDb(float db) {
+        if (earpieceEnhancer != null) earpieceEnhancer.setTargetGain((int)(db * 100));
     }
     
-    private void setupEqualizers() {
+    public void setSpeakerGainDb(float db) {
+        if (speakerLeftEnhancer != null) speakerLeftEnhancer.setTargetGain((int)(db * 100));
+        if (speakerRightEnhancer != null) speakerRightEnhancer.setTargetGain((int)(db * 100));
+    }
+    
+    private void setupAudioEffects() {
         try {
             earpieceEqualizer = new Equalizer(0, earpiecePlayer.getAudioSessionId());
             earpieceEqualizer.setEnabled(true);
             speakerLpEqualizer = new Equalizer(0, speakerPlayerLeft.getAudioSessionId());
             speakerLpEqualizer.setEnabled(true);
+            
+            earpieceEnhancer = new LoudnessEnhancer(earpiecePlayer.getAudioSessionId());
+            earpieceEnhancer.setEnabled(true);
+            speakerLeftEnhancer = new LoudnessEnhancer(speakerPlayerLeft.getAudioSessionId());
+            speakerLeftEnhancer.setEnabled(true);
+            speakerRightEnhancer = new LoudnessEnhancer(speakerPlayerRight.getAudioSessionId());
+            speakerRightEnhancer.setEnabled(true);
         } catch (Exception ignored) {}
     }
 
@@ -181,7 +196,7 @@ public class MediaPlaybackService extends Service {
         Notification.Action playPauseAction = new Notification.Action.Builder(
             isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play, "Play/Pause", playPauseIntent).build();
 
-        Notification notification = new Notification.Builder(this, CHANNEL_ID)
+        Notification.Builder builder = new Notification.Builder(this, CHANNEL_ID)
                 .setContentTitle(currentItem.getTitle())
                 .setContentText(currentItem.getArtist())
                 .setSmallIcon(android.R.drawable.ic_media_play)
@@ -189,9 +204,16 @@ public class MediaPlaybackService extends Service {
                 .addAction(playPauseAction)
                 .addAction(new Notification.Action.Builder(android.R.drawable.ic_media_next, "Next", nextIntent).build())
                 .setStyle(new Notification.MediaStyle().setShowActionsInCompactView(0, 1, 2))
-                .setOngoing(isPlaying)
-                .build();
-        startForeground(NOTIFICATION_ID, notification);
+                .setOngoing(isPlaying);
+
+        if (currentItem.getAlbumArtUri() != null) {
+            try {
+                Bitmap albumArt = MediaStore.Images.Media.getBitmap(this.getContentResolver(), currentItem.getAlbumArtUri());
+                builder.setLargeIcon(albumArt);
+            } catch (IOException e) { /* ignore */ }
+        }
+        
+        startForeground(NOTIFICATION_ID, builder.build());
     }
 
     private void createNotificationChannel() {
@@ -207,7 +229,11 @@ public class MediaPlaybackService extends Service {
         earpiecePlayer = speakerPlayerLeft = speakerPlayerRight = null;
         if (earpieceEqualizer != null) earpieceEqualizer.release();
         if (speakerLpEqualizer != null) speakerLpEqualizer.release();
+        if (earpieceEnhancer != null) earpieceEnhancer.release();
+        if (speakerLeftEnhancer != null) speakerLeftEnhancer.release();
+        if (speakerRightEnhancer != null) speakerRightEnhancer.release();
         earpieceEqualizer = speakerLpEqualizer = null;
+        earpieceEnhancer = speakerLeftEnhancer = speakerRightEnhancer = null;
         isPlaying = false;
     }
 
