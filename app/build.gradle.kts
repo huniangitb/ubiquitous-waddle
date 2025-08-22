@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.dualaudioplayer"
         minSdk = 24
         targetSdk = 34
-        versionCode = 9
-        versionName = "9.0 Kotlin Fixed"
+        versionCode = 10
+        versionName = "10.0 Kotlin Final Fix"
     }
 
     buildTypes {

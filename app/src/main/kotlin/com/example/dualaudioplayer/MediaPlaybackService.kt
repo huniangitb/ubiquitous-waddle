@@ -164,7 +164,8 @@ class MediaPlaybackService : Service() {
             val cutoffFreqMilliHz = freqHz * 1000
             val minLevel = eq.bandLevelRange[0]
             for (i in 0 until eq.numberOfBands) {
-                eq.setBandLevel(i.toShort(), if (eq.getCenterFreq(i) < cutoffFreqMilliHz) minLevel else 0.toShort())
+                val bandIndex = i.toShort()
+                eq.setBandLevel(bandIndex, if (eq.getCenterFreq(bandIndex) < cutoffFreqMilliHz) minLevel else 0.toShort())
             }
         }
     }
@@ -174,7 +175,8 @@ class MediaPlaybackService : Service() {
             val cutoffFreqMilliHz = freqHz * 1000
             val minLevel = eq.bandLevelRange[0]
             for (i in 0 until eq.numberOfBands) {
-                eq.setBandLevel(i.toShort(), if (eq.getCenterFreq(i) > cutoffFreqMilliHz) minLevel else 0.toShort())
+                val bandIndex = i.toShort()
+                eq.setBandLevel(bandIndex, if (eq.getCenterFreq(bandIndex) > cutoffFreqMilliHz) minLevel else 0.toShort())
             }
         }
     }

@@ -208,7 +208,6 @@ class MainActivity : AppCompatActivity() {
             mediaService = binder.getService(); isBound = true
             mediaService?.setAudioList(audioList)
             loadSettings()
-            // After loading settings, update the service with initial values
             mediaService?.setEarpieceGainDb(binding.earpieceGainSlider.value)
             mediaService?.setSpeakerGainDb(binding.speakerGainSlider.value)
             mediaService?.setSyncDelay(binding.delaySlider.value.toInt())
