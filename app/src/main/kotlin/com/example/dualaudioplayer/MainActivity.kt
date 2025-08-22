@@ -60,7 +60,6 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         setSupportActionBar(binding.toolbar)
-
         setupUI()
         checkAndRequestPermissions()
         Intent(this, MediaPlaybackService::class.java).also {
@@ -100,8 +99,9 @@ class MainActivity : AppCompatActivity() {
             override fun onStartTrackingTouch(slider: Slider) {}
             override fun onStopTrackingTouch(slider: Slider) { mediaService?.seekTo((slider.value * 1000).toInt()) }
         })
-
-        val listener = Slider.OnChangeListener { slider, value, _ ->
+        val listener = Slider.OnChangeListener { slider, value, fromUser ->
+            // 只有当用户拖动时才实时更新，避免在loadSettings时触发不必要的调用
+            if (!fromUser) return@OnChangeListener
             when (slider.id) {
                 R.id.earpieceGainSlider -> {
                     binding.earpieceGainLabel.text = "听筒衰减: %.1f dB".format(Locale.US, value)
@@ -133,7 +133,6 @@ class MainActivity : AppCompatActivity() {
         binding.delaySlider.addOnChangeListener(listener)
         binding.highPassFilterSlider.addOnChangeListener(listener)
         binding.lowPassFilterSlider.addOnChangeListener(listener)
-
         val stopListener = object : Slider.OnSliderTouchListener {
             override fun onStartTrackingTouch(slider: Slider) {}
             override fun onStopTrackingTouch(slider: Slider) {
@@ -206,6 +205,7 @@ class MainActivity : AppCompatActivity() {
             mediaService = binder.getService(); isBound = true
             mediaService?.setAudioList(audioList)
             loadSettings()
+            // 在服务连接后，将UI上的初始值传递给服务
             mediaService?.setEarpieceAttenuationDb(binding.earpieceGainSlider.value)
             mediaService?.setSpeakerAttenuationDb(binding.speakerGainSlider.value)
             mediaService?.setSyncDelay(binding.delaySlider.value.toInt())

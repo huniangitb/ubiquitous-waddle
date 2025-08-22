@@ -55,6 +55,10 @@ class MediaPlaybackService : Service() {
     private var syncDelayMs = 0
     private var earpieceAttenuation = 1.0f
     private var speakerAttenuation = 1.0f
+    
+    // 关键修复：保存滤波器状态
+    private var currentHighPassHz: Int = 50
+    private var currentLowPassHz: Int = 15000
 
     private val volumeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -85,20 +89,12 @@ class MediaPlaybackService : Service() {
         val mediaVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
         val maxMediaVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
         val systemVolumeRatio = if (maxMediaVolume > 0) mediaVolume.toFloat() / maxMediaVolume.toFloat() else 0f
-
-        // 1. 控制听筒
         val finalEarpieceVolume = systemVolumeRatio * earpieceAttenuation
-        // 关键修复：直接在播放器层面强制只播放左声道
         earpiecePlayer?.setVolume(finalEarpieceVolume, 0.0f)
-        
-        // 同时同步系统通话音量流，以确保路由正确
         val maxVoiceVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)
         val voiceVolume = (finalEarpieceVolume * maxVoiceVolume).toInt()
         audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, voiceVolume, 0)
-        
-        // 2. 控制扬声器
         val finalSpeakerVolume = systemVolumeRatio * speakerAttenuation
-        // 关键修复：直接在播放器层面强制只播放右声道
         speakerPlayer?.setVolume(0.0f, finalSpeakerVolume)
     }
 
@@ -112,6 +108,18 @@ class MediaPlaybackService : Service() {
         syncVolume()
     }
 
+    // 关键修复：延迟实时生效
+    fun setSyncDelay(ms: Int) {
+        this.syncDelayMs = ms
+        // 如果正在播放，则执行“无缝重启”来应用新延迟
+        if (isPlaying && areAllPlayersReady()) {
+            val currentPosition = earpiecePlayer?.currentPosition ?: 0
+            pauseAudio()
+            seekTo(currentPosition)
+            resumeAudio()
+        }
+    }
+
     @Synchronized
     private fun onPlayerPrepared() {
         playersPreparedCount++
@@ -119,6 +127,37 @@ class MediaPlaybackService : Service() {
             setupAudioEffects()
             syncVolume()
             playAudio()
+        }
+    }
+    
+    private fun setupAudioEffects() {
+        try {
+            earpiecePlayer?.audioSessionId?.let { 
+                earpieceEqualizer = Equalizer(0, it).apply { setEnabled(true) }
+                // 关键修复：重新应用已保存的滤波器设置
+                updateHighPassFilter(currentHighPassHz)
+            }
+            speakerPlayer?.audioSessionId?.let { 
+                speakerEqualizer = Equalizer(0, it).apply { setEnabled(true) }
+                // 关键修复：重新应用已保存的滤波器设置
+                updateLowPassFilter(currentLowPassHz)
+            }
+        } catch (e: Exception) { /* Ignore */ }
+    }
+    
+    // 关键修复：更新滤波器时，同时保存状态
+    fun updateHighPassFilter(freqHz: Int) {
+        currentHighPassHz = freqHz
+        earpieceEqualizer?.let { eq ->
+            val cutoff = freqHz * 1000; val min = eq.bandLevelRange[0]
+            for (i in 0 until eq.numberOfBands) { val band = i.toShort(); eq.setBandLevel(band, if (eq.getCenterFreq(band) < cutoff) min else 0.toShort()) }
+        }
+    }
+    fun updateLowPassFilter(freqHz: Int) {
+        currentLowPassHz = freqHz
+        speakerEqualizer?.let { eq ->
+            val cutoff = freqHz * 1000; val min = eq.bandLevelRange[0]
+            for (i in 0 until eq.numberOfBands) { val band = i.toShort(); eq.setBandLevel(band, if (eq.getCenterFreq(band) > cutoff) min else 0.toShort()) }
         }
     }
 
@@ -155,7 +194,7 @@ class MediaPlaybackService : Service() {
     }
     private fun resumeAudio() { if (areAllPlayersReady() && !isPlaying) playAudio() }
     private fun pauseAudio() {
-        if (!areAllPlayersReady() || !isPlaying) return
+        if (!areAllPlayersReady()) return // 修复：防止在未准备好时调用
         serviceScope.coroutineContext.cancelChildren()
         handler.removeCallbacksAndMessages(null)
         getAllPlayers().forEach { it?.takeIf { p -> p.isPlaying }?.pause() }
@@ -167,25 +206,6 @@ class MediaPlaybackService : Service() {
     private fun playNext() { if (audioList.isNotEmpty()) playSongAtIndex((currentIndex + 1) % audioList.size) }
     private fun playPrev() { if (audioList.isNotEmpty()) playSongAtIndex((currentIndex - 1 + audioList.size) % audioList.size) }
     private fun checkCompletion() { if (isPlaying && earpiecePlayer?.isPlaying == false) playNext() }
-    fun setSyncDelay(ms: Int) { this.syncDelayMs = ms }
-    private fun setupAudioEffects() {
-        try {
-            earpiecePlayer?.audioSessionId?.let { earpieceEqualizer = Equalizer(0, it).apply { setEnabled(true) } }
-            speakerPlayer?.audioSessionId?.let { speakerEqualizer = Equalizer(0, it).apply { setEnabled(true) } }
-        } catch (e: Exception) { /* Ignore */ }
-    }
-    fun updateHighPassFilter(freqHz: Int) {
-        earpieceEqualizer?.let { eq ->
-            val cutoff = freqHz * 1000; val min = eq.bandLevelRange[0]
-            for (i in 0 until eq.numberOfBands) { val band = i.toShort(); eq.setBandLevel(band, if (eq.getCenterFreq(band) < cutoff) min else 0.toShort()) }
-        }
-    }
-    fun updateLowPassFilter(freqHz: Int) {
-        speakerEqualizer?.let { eq ->
-            val cutoff = freqHz * 1000; val min = eq.bandLevelRange[0]
-            for (i in 0 until eq.numberOfBands) { val band = i.toShort(); eq.setBandLevel(band, if (eq.getCenterFreq(band) > cutoff) min else 0.toShort()) }
-        }
-    }
     private val updateSeekBarRunnable = object : Runnable { override fun run() { if (isPlaying && areAllPlayersReady()) { broadcastUpdate(); handler.postDelayed(this, 1000) } } }
     private fun broadcastUpdate() {
         if (currentIndex !in audioList.indices) return
