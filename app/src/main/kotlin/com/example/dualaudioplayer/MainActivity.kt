@@ -32,10 +32,13 @@ class MainActivity : AppCompatActivity() {
     private var isBound = false
     private var audioList = emptyList<AudioItem>()
 
-    private val requestPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-            if (isGranted) loadAudioFiles()
-            else Toast.makeText(this, "需要权限才能加载音频文件", Toast.LENGTH_LONG).show()
+    private val requestPermissionsLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+            if (permissions[Manifest.permission.READ_MEDIA_AUDIO] == true) {
+                loadAudioFiles()
+            } else {
+                Toast.makeText(this, "需要读取音频权限才能使用", Toast.LENGTH_LONG).show()
+            }
         }
 
     private val updateReceiver = object : BroadcastReceiver() {
@@ -55,8 +58,12 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // 关键修复：将布局中的 Toolbar 设置为 Activity 的 ActionBar
+        setSupportActionBar(binding.toolbar)
+
         setupUI()
-        checkAndRequestPermission()
+        checkAndRequestPermissions()
         Intent(this, MediaPlaybackService::class.java).also {
             startService(it)
             bindService(it, connection, Context.BIND_AUTO_CREATE)
@@ -64,12 +71,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupUI() {
-        binding.toolbar.setOnMenuItemClickListener {
-            if (it.itemId == R.id.action_settings) {
-                bottomSheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
-                true
-            } else false
-        }
+        // 现在 Toolbar 的菜单点击事件由系统处理，所以这里不再需要设置 OnMenuItemClickListener
+        // binding.toolbar.setOnMenuItemClickListener { ... }
         bottomSheetBehavior = BottomSheetBehavior.from(binding.bottomSheet)
         audioAdapter = AudioListAdapter { audioItem -> mediaService?.playSongAtIndex(audioList.indexOf(audioItem)) }
         binding.recyclerView.apply {
@@ -79,25 +82,33 @@ class MainActivity : AppCompatActivity() {
         binding.fabPlayPause.setOnClickListener { mediaService?.togglePlayPause() }
         setupSliderListeners()
     }
+    
+    // 关键修复：添加 onCreateOptionsMenu 和 onOptionsItemSelected 来处理菜单
+    override fun onCreateOptionsMenu(menu: android.view.Menu): Boolean {
+        menuInflater.inflate(R.menu.main_menu, menu)
+        return true
+    }
 
+    override fun onOptionsItemSelected(item: android.view.MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_settings -> {
+                bottomSheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
+    }
+
+    // --- 其他方法保持不变 ---
     private fun setupSliderListeners() {
         binding.playbackSlider.addOnSliderTouchListener(object : Slider.OnSliderTouchListener {
             override fun onStartTrackingTouch(slider: Slider) {}
-            override fun onStopTrackingTouch(slider: Slider) {
-                mediaService?.seekTo((slider.value * 1000).toInt())
-            }
+            override fun onStopTrackingTouch(slider: Slider) { mediaService?.seekTo((slider.value * 1000).toInt()) }
         })
-
-        val sliderChangeListener = Slider.OnChangeListener { slider, value, _ ->
+        val listener = Slider.OnChangeListener { slider, value, _ ->
             when (slider.id) {
-                R.id.earpieceGainSlider -> {
-                    binding.earpieceGainLabel.text = "听筒增益: %.1f dB".format(Locale.US, value)
-                    mediaService?.setEarpieceGainDb(value)
-                }
-                R.id.speakerGainSlider -> {
-                    binding.speakerGainLabel.text = "扬声器增益: %.1f dB".format(Locale.US, value)
-                    mediaService?.setSpeakerGainDb(value)
-                }
+                R.id.earpieceGainSlider -> { binding.earpieceGainLabel.text = "听筒增益: %.1f dB".format(Locale.US, value); mediaService?.setEarpieceGainDb(value) }
+                R.id.speakerGainSlider -> { binding.speakerGainLabel.text = "扬声器增益: %.1f dB".format(Locale.US, value); mediaService?.setSpeakerGainDb(value) }
                 R.id.delaySlider -> {
                     val target = when { value == 0f -> "无"; value > 0f -> "听筒"; else -> "扬声器" }
                     binding.delayLabel.text = "同步延迟: %d ms (%s)".format(Locale.US, abs(value).toInt(), target)
@@ -115,14 +126,10 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-
-        binding.earpieceGainSlider.addOnChangeListener(sliderChangeListener)
-        binding.speakerGainSlider.addOnChangeListener(sliderChangeListener)
-        binding.delaySlider.addOnChangeListener(sliderChangeListener)
-        binding.highPassFilterSlider.addOnChangeListener(sliderChangeListener)
-        binding.lowPassFilterSlider.addOnChangeListener(sliderChangeListener)
-
-        val touchStopListener = object : Slider.OnSliderTouchListener {
+        binding.earpieceGainSlider.addOnChangeListener(listener); binding.speakerGainSlider.addOnChangeListener(listener)
+        binding.delaySlider.addOnChangeListener(listener); binding.highPassFilterSlider.addOnChangeListener(listener)
+        binding.lowPassFilterSlider.addOnChangeListener(listener)
+        val stopListener = object : Slider.OnSliderTouchListener {
             override fun onStartTrackingTouch(slider: Slider) {}
             override fun onStopTrackingTouch(slider: Slider) {
                 when (slider.id) {
@@ -134,13 +141,10 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        binding.earpieceGainSlider.addOnSliderTouchListener(touchStopListener)
-        binding.speakerGainSlider.addOnSliderTouchListener(touchStopListener)
-        binding.delaySlider.addOnSliderTouchListener(touchStopListener)
-        binding.highPassFilterSlider.addOnSliderTouchListener(touchStopListener)
-        binding.lowPassFilterSlider.addOnSliderTouchListener(touchStopListener)
+        binding.earpieceGainSlider.addOnSliderTouchListener(stopListener); binding.speakerGainSlider.addOnSliderTouchListener(stopListener)
+        binding.delaySlider.addOnSliderTouchListener(stopListener); binding.highPassFilterSlider.addOnSliderTouchListener(stopListener)
+        binding.lowPassFilterSlider.addOnSliderTouchListener(stopListener)
     }
-
     private fun loadSettings() {
         val prefs = getSharedPreferences("DualAudioPrefs", MODE_PRIVATE)
         with(binding) {
@@ -151,57 +155,43 @@ class MainActivity : AppCompatActivity() {
             lowPassFilterSlider.value = prefs.getInt("lowPass", 15000).toFloat()
         }
     }
-
     private fun snapToStep(value: Float, valueFrom: Float, stepSize: Float): Float {
         if (stepSize <= 0) return value
         return round((value - valueFrom) / stepSize) * stepSize + valueFrom
     }
-
     private fun saveFloat(key: String, value: Float) = getSharedPreferences("DualAudioPrefs", MODE_PRIVATE).edit().putFloat(key, value).apply()
     private fun saveInt(key: String, value: Int) = getSharedPreferences("DualAudioPrefs", MODE_PRIVATE).edit().putInt(key, value).apply()
-
-    private fun checkAndRequestPermission() {
-        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
-        when {
-            ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED -> loadAudioFiles()
-            else -> requestPermissionLauncher.launch(permission)
-        }
+    private fun checkAndRequestPermissions() {
+        val permissions = mutableListOf(Manifest.permission.READ_MEDIA_AUDIO)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { permissions.add(Manifest.permission.POST_NOTIFICATIONS) }
+        val toRequest = permissions.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
+        if (toRequest.isEmpty()) loadAudioFiles() else requestPermissionsLauncher.launch(toRequest.toTypedArray())
     }
-
     private fun loadAudioFiles() {
-        val tempList = mutableListOf<AudioItem>()
-        val projection = arrayOf(MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.ALBUM_ID)
-        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
-        contentResolver.query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, projection, selection, null, "${MediaStore.Audio.Media.TITLE} ASC")?.use { cursor ->
-            val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID); val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE); val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST); val durCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION); val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
-            while (cursor.moveToNext()) {
-                val albumArtUri = ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), cursor.getLong(albumIdCol))
-                val itemUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, cursor.getLong(idCol))
-                tempList.add(AudioItem(itemUri, cursor.getString(titleCol), cursor.getString(artistCol), cursor.getInt(durCol), albumArtUri))
+        val list = mutableListOf<AudioItem>()
+        val proj = arrayOf(MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.ALBUM_ID)
+        contentResolver.query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, proj, "${MediaStore.Audio.Media.IS_MUSIC} != 0", null, "${MediaStore.Audio.Media.TITLE} ASC")?.use { c ->
+            val idCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID); val titleCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE); val artistCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST); val durCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION); val albumIdCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
+            while (c.moveToNext()) {
+                val artUri = ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), c.getLong(albumIdCol))
+                val itemUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, c.getLong(idCol))
+                list.add(AudioItem(itemUri, c.getString(titleCol), c.getString(artistCol), c.getInt(durCol), artUri))
             }
         }
-        audioList = tempList
-        audioAdapter.submitList(audioList)
-        mediaService?.setAudioList(audioList)
+        audioList = list; audioAdapter.submitList(audioList); mediaService?.setAudioList(audioList)
     }
-
     private fun updateUI(isPlaying: Boolean, currentIndex: Int, currentPosition: Int, duration: Int) {
         binding.fabPlayPause.setImageResource(if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
         if (currentIndex in audioList.indices) { binding.statusTextView.text = audioList[currentIndex].title }
-        val durationInSeconds = if (duration > 0) duration / 1000 else 100
-        val currentPositionInSeconds = currentPosition / 1000
-        binding.playbackSlider.valueTo = durationInSeconds.toFloat()
-        binding.playbackSlider.value = currentPositionInSeconds.toFloat()
-        binding.currentTimeTextView.text = formatTime(currentPosition)
-        binding.totalTimeTextView.text = formatTime(duration)
+        val durSec = if (duration > 0) duration / 1000 else 100
+        val curSec = currentPosition / 1000
+        binding.playbackSlider.valueTo = durSec.toFloat(); binding.playbackSlider.value = curSec.toFloat()
+        binding.currentTimeTextView.text = formatTime(currentPosition); binding.totalTimeTextView.text = formatTime(duration)
     }
-
     private fun formatTime(millis: Int): String = String.format(Locale.US, "%d:%02d", TimeUnit.MILLISECONDS.toMinutes(millis.toLong()), TimeUnit.MILLISECONDS.toSeconds(millis.toLong()) % 60)
-
-    override fun onStart() { super.onStart(); registerReceiver(updateReceiver, IntentFilter(MediaPlaybackService.ACTION_UPDATE_UI)) }
+    override fun onStart() { super.onStart(); registerReceiver(updateReceiver, IntentFilter(MediaPlaybackService.ACTION_UPDATE_UI), RECEIVER_NOT_EXPORTED) }
     override fun onStop() { super.onStop(); unregisterReceiver(updateReceiver) }
     override fun onDestroy() { super.onDestroy(); if (isBound) { unbindService(connection); isBound = false } }
-
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, service: IBinder) {
             val binder = service as MediaPlaybackService.LocalBinder
