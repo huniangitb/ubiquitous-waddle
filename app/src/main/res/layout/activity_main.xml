@@ -48,7 +48,7 @@
                         android:layout_weight="1"
                         android:valueFrom="0"
                         android:valueTo="100"
-                        android:stepSize="0.0"/> <!-- 关键修复：改为0.0以允许连续值 -->
+                        android:stepSize="0.0"/>
                     <TextView android:id="@+id/totalTimeTextView" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0:00" />
                 </LinearLayout>
             </LinearLayout>
@@ -85,7 +85,6 @@
         <TextView android:id="@+id/speakerGainLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="扬声器衰减: 0.0 dB" android:textAppearance="?attr/textAppearanceLabelLarge" android:layout_marginTop="8dp"/>
         <com.google.android.material.slider.Slider android:id="@+id/speakerGainSlider" android:layout_width="match_parent" android:layout_height="wrap_content" android:valueFrom="-24.0" android:valueTo="0.0" android:stepSize="1.0" android:value="0.0"/>
 
-        <!-- 新增的静音开关 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
