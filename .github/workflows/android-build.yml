@@ -35,7 +35,7 @@ jobs:
 
     - name: Build Debug APK (Unsigned)
       # gradle/gradle-build-action 已经设置了 PATH，可以直接运行 gradlew
-      run: ./gradlew assembleDebug
+      run: gradlew assembleDebug
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
