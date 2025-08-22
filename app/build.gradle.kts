@@ -9,8 +9,8 @@ android {
         applicationId = "com.example.dualaudioplayer"
         minSdk = 31
         targetSdk = 34
-        versionCode = 17
-        versionName = "17.0 Independent Controls"
+        versionCode = 18
+        versionName = "18.0 Slider Fixed"
     }
     buildTypes {
         release {

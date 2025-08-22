@@ -219,7 +219,6 @@ class MainActivity : AppCompatActivity() {
             mediaService = binder.getService(); isBound = true
             mediaService?.setAudioList(audioList)
             loadSettings()
-            // 将所有初始状态传递给服务
             mediaService?.setEarpieceAttenuationDb(binding.earpieceGainSlider.value)
             mediaService?.setSpeakerAttenuationDb(binding.speakerGainSlider.value)
             mediaService?.setEarpieceEnabled(binding.enableEarpieceSwitch.isChecked)

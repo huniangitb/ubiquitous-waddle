@@ -49,8 +49,8 @@ class MediaPlaybackService : Service() {
     private var syncDelayMs = 0
     private var earpieceAttenuation = 1.0f
     private var speakerAttenuation = 1.0f
-    private var isEarpieceEnabled = true // 新增状态
-    private var isSpeakerEnabled = true  // 新增状态
+    private var isEarpieceEnabled = true 
+    private var isSpeakerEnabled = true  
     private var currentHighPassHz: Int = 50
     private var currentLowPassHz: Int = 15000
 
@@ -68,7 +68,6 @@ class MediaPlaybackService : Service() {
         serviceJob.cancel()
     }
 
-    // 新增：独立的音量应用逻辑
     private fun applyCurrentVolumes() {
         val earpieceVolume = if (isEarpieceEnabled) earpieceAttenuation else 0.0f
         earpiecePlayer?.setVolume(earpieceVolume, 0.0f)
@@ -77,7 +76,6 @@ class MediaPlaybackService : Service() {
         speakerPlayer?.setVolume(0.0f, speakerVolume)
     }
 
-    // 新增：控制开关的方法
     fun setEarpieceEnabled(isEnabled: Boolean) {
         this.isEarpieceEnabled = isEnabled
         applyCurrentVolumes()
@@ -90,7 +88,7 @@ class MediaPlaybackService : Service() {
 
     fun setEarpieceAttenuationDb(db: Float) {
         earpieceAttenuation = 10.0f.pow(db / 20.0f)
-        applyCurrentVolumes() // 不再同步系统音量，只应用自己的衰减
+        applyCurrentVolumes()
     }
     
     fun setSpeakerAttenuationDb(db: Float) {
@@ -113,12 +111,11 @@ class MediaPlaybackService : Service() {
         playersPreparedCount++
         if (playersPreparedCount == 2) {
             setupAudioEffects()
-            applyCurrentVolumes() // 应用初始音量和静音状态
+            applyCurrentVolumes()
             playAudio()
         }
     }
     
-    // --- 其他方法保持不变 ---
     fun setAudioList(list: List<AudioItem>) { this.audioList = list }
     fun playSongAtIndex(index: Int) {
         if (index !in audioList.indices) return; currentIndex = index; releasePlayers(); playersPreparedCount = 0
