@@ -8,6 +8,8 @@ import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.provider.MediaStore
+import android.view.Menu
+import android.view.MenuItem
 import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -27,7 +29,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var bottomSheetBehavior: BottomSheetBehavior<LinearLayout>
     private lateinit var audioAdapter: AudioListAdapter
-
     private var mediaService: MediaPlaybackService? = null
     private var isBound = false
     private var audioList = emptyList<AudioItem>()
@@ -58,8 +59,6 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
-        // 关键修复：将布局中的 Toolbar 设置为 Activity 的 ActionBar
         setSupportActionBar(binding.toolbar)
 
         setupUI()
@@ -71,8 +70,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupUI() {
-        // 现在 Toolbar 的菜单点击事件由系统处理，所以这里不再需要设置 OnMenuItemClickListener
-        // binding.toolbar.setOnMenuItemClickListener { ... }
         bottomSheetBehavior = BottomSheetBehavior.from(binding.bottomSheet)
         audioAdapter = AudioListAdapter { audioItem -> mediaService?.playSongAtIndex(audioList.indexOf(audioItem)) }
         binding.recyclerView.apply {
@@ -82,14 +79,13 @@ class MainActivity : AppCompatActivity() {
         binding.fabPlayPause.setOnClickListener { mediaService?.togglePlayPause() }
         setupSliderListeners()
     }
-    
-    // 关键修复：添加 onCreateOptionsMenu 和 onOptionsItemSelected 来处理菜单
-    override fun onCreateOptionsMenu(menu: android.view.Menu): Boolean {
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.main_menu, menu)
         return true
     }
 
-    override fun onOptionsItemSelected(item: android.view.MenuItem): Boolean {
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
             R.id.action_settings -> {
                 bottomSheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
@@ -99,16 +95,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // --- 其他方法保持不变 ---
     private fun setupSliderListeners() {
         binding.playbackSlider.addOnSliderTouchListener(object : Slider.OnSliderTouchListener {
             override fun onStartTrackingTouch(slider: Slider) {}
             override fun onStopTrackingTouch(slider: Slider) { mediaService?.seekTo((slider.value * 1000).toInt()) }
         })
+
         val listener = Slider.OnChangeListener { slider, value, _ ->
             when (slider.id) {
-                R.id.earpieceGainSlider -> { binding.earpieceGainLabel.text = "听筒增益: %.1f dB".format(Locale.US, value); mediaService?.setEarpieceGainDb(value) }
-                R.id.speakerGainSlider -> { binding.speakerGainLabel.text = "扬声器增益: %.1f dB".format(Locale.US, value); mediaService?.setSpeakerGainDb(value) }
+                R.id.earpieceGainSlider -> {
+                    binding.earpieceGainLabel.text = "听筒增益: %.1f dB".format(Locale.US, value)
+                    mediaService?.setEarpieceGainDb(value)
+                }
+                R.id.speakerGainSlider -> {
+                    binding.speakerGainLabel.text = "扬声器增益: %.1f dB".format(Locale.US, value)
+                    mediaService?.setSpeakerGainDb(value)
+                }
                 R.id.delaySlider -> {
                     val target = when { value == 0f -> "无"; value > 0f -> "听筒"; else -> "扬声器" }
                     binding.delayLabel.text = "同步延迟: %d ms (%s)".format(Locale.US, abs(value).toInt(), target)
@@ -126,9 +128,12 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        binding.earpieceGainSlider.addOnChangeListener(listener); binding.speakerGainSlider.addOnChangeListener(listener)
-        binding.delaySlider.addOnChangeListener(listener); binding.highPassFilterSlider.addOnChangeListener(listener)
+        binding.earpieceGainSlider.addOnChangeListener(listener)
+        binding.speakerGainSlider.addOnChangeListener(listener)
+        binding.delaySlider.addOnChangeListener(listener)
+        binding.highPassFilterSlider.addOnChangeListener(listener)
         binding.lowPassFilterSlider.addOnChangeListener(listener)
+
         val stopListener = object : Slider.OnSliderTouchListener {
             override fun onStartTrackingTouch(slider: Slider) {}
             override fun onStopTrackingTouch(slider: Slider) {
@@ -141,8 +146,10 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        binding.earpieceGainSlider.addOnSliderTouchListener(stopListener); binding.speakerGainSlider.addOnSliderTouchListener(stopListener)
-        binding.delaySlider.addOnSliderTouchListener(stopListener); binding.highPassFilterSlider.addOnSliderTouchListener(stopListener)
+        binding.earpieceGainSlider.addOnSliderTouchListener(stopListener)
+        binding.speakerGainSlider.addOnSliderTouchListener(stopListener)
+        binding.delaySlider.addOnSliderTouchListener(stopListener)
+        binding.highPassFilterSlider.addOnSliderTouchListener(stopListener)
         binding.lowPassFilterSlider.addOnSliderTouchListener(stopListener)
     }
     private fun loadSettings() {

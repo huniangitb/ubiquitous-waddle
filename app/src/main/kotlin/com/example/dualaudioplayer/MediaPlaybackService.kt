@@ -42,28 +42,24 @@ class MediaPlaybackService : Service() {
     private val serviceJob = Job()
     private val serviceScope = CoroutineScope(Dispatchers.Main + serviceJob)
     private val handler = Handler(Looper.getMainLooper())
-
     private lateinit var audioManager: AudioManager
     private var earpiecePlayer: MediaPlayer? = null
     private var speakerPlayer: MediaPlayer? = null
-    // ... (其他成员变量)
+    private var earpieceEqualizer: Equalizer? = null
+    private var speakerEqualizer: Equalizer? = null
+    private var earpieceEnhancer: LoudnessEnhancer? = null
+    private var speakerEnhancer: LoudnessEnhancer? = null
     private var audioList: List<AudioItem> = emptyList()
     private var currentIndex = -1
     var isPlaying = false
         private set
     private var playersPreparedCount = 0
     private var syncDelayMs = 0
-    private var earpieceEqualizer: Equalizer? = null
-    private var speakerEqualizer: Equalizer? = null
-    private var earpieceEnhancer: LoudnessEnhancer? = null
-    private var speakerEnhancer: LoudnessEnhancer? = null
 
-    // 关键修复：监听系统音量变化的接收器
     private val volumeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == VOLUME_CHANGED_ACTION) {
-                val streamType = intent.getIntExtra("android.media.EXTRA_VOLUME_STREAM_TYPE", -1)
-                if (streamType == AudioManager.STREAM_MUSIC) {
+                if (intent.getIntExtra("android.media.EXTRA_VOLUME_STREAM_TYPE", -1) == AudioManager.STREAM_MUSIC) {
                     syncVolume()
                 }
             }
@@ -71,14 +67,12 @@ class MediaPlaybackService : Service() {
     }
 
     inner class LocalBinder : Binder() { fun getService(): MediaPlaybackService = this@MediaPlaybackService }
-
     override fun onBind(intent: Intent): IBinder = binder
 
     override fun onCreate() {
         super.onCreate()
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         createNotificationChannel()
-        // 注册音量接收器
         registerReceiver(volumeReceiver, IntentFilter(VOLUME_CHANGED_ACTION))
     }
 
@@ -86,8 +80,40 @@ class MediaPlaybackService : Service() {
         super.onDestroy()
         releasePlayers()
         serviceJob.cancel()
-        // 注销音量接收器
         unregisterReceiver(volumeReceiver)
+    }
+
+    private fun syncVolume() {
+        val mediaVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+        val maxMediaVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val maxVoiceVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)
+        if (maxMediaVolume > 0) {
+            val volumeRatio = mediaVolume.toFloat() / maxMediaVolume.toFloat()
+            val voiceVolume = (volumeRatio * maxVoiceVolume).toInt()
+            audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, voiceVolume, 0)
+        }
+    }
+
+    fun setAudioList(list: List<AudioItem>) { this.audioList = list }
+
+    fun playSongAtIndex(index: Int) {
+        if (index !in audioList.indices) return
+        currentIndex = index
+        releasePlayers()
+        playersPreparedCount = 0
+        try {
+            val uri = audioList[index].uri
+            earpiecePlayer = createPlayer(uri, AudioAttributes.USAGE_VOICE_COMMUNICATION)
+            speakerPlayer = createPlayer(uri, AudioAttributes.USAGE_MEDIA)
+        } catch (e: IOException) { Toast.makeText(this, "无法播放文件", Toast.LENGTH_SHORT).show() }
+    }
+
+    private fun createPlayer(uri: Uri, usage: Int) = MediaPlayer().apply {
+        setAudioAttributes(AudioAttributes.Builder().setUsage(usage).build())
+        setDataSource(this@MediaPlaybackService, uri)
+        setOnPreparedListener { onPlayerPrepared() }
+        setOnCompletionListener { checkCompletion() }
+        prepareAsync()
     }
 
     @Synchronized
@@ -97,46 +123,13 @@ class MediaPlaybackService : Service() {
             earpiecePlayer?.setVolume(1.0f, 0.0f)
             speakerPlayer?.setVolume(0.0f, 1.0f)
             setupAudioEffects()
-            syncVolume() // 关键修复：播放前立即同步一次音量
+            syncVolume()
             playAudio()
         }
     }
 
-    // 关键修复：将媒体音量按比例同步到通话音量
-    private fun syncVolume() {
-        val mediaVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-        val maxMediaVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-        val maxVoiceVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)
-
-        if (maxMediaVolume > 0) {
-            val volumeRatio = mediaVolume.toFloat() / maxMediaVolume.toFloat()
-            val voiceVolume = (volumeRatio * maxVoiceVolume).toInt()
-            audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, voiceVolume, 0)
-        }
-    }
-
-    // --- 其他方法保持不变，这里为了简洁省略 ---
-    fun setAudioList(list: List<AudioItem>) { this.audioList = list }
-    fun playSongAtIndex(index: Int) {
-        if (index !in audioList.indices) return
-        currentIndex = index
-        releasePlayers()
-        playersPreparedCount = 0
-        try {
-            val uri = audioList[index].uri
-            // USAGE_VOICE_COMMUNICATION 是强制路由到听筒的关键，必须保留
-            earpiecePlayer = createPlayer(uri, AudioAttributes.USAGE_VOICE_COMMUNICATION)
-            speakerPlayer = createPlayer(uri, AudioAttributes.USAGE_MEDIA)
-        } catch (e: IOException) { Toast.makeText(this, "无法播放文件", Toast.LENGTH_SHORT).show() }
-    }
-    private fun createPlayer(uri: Uri, usage: Int) = MediaPlayer().apply {
-        setAudioAttributes(AudioAttributes.Builder().setUsage(usage).build())
-        setDataSource(this@MediaPlaybackService, uri)
-        setOnPreparedListener { onPlayerPrepared() }
-        setOnCompletionListener { checkCompletion() }
-        prepareAsync()
-    }
     fun togglePlayPause() { if (isPlaying) pauseAudio() else resumeAudio() }
+
     private fun playAudio() {
         if (!areAllPlayersReady() || isPlaying) return
         val earpieceDelay = max(0, syncDelayMs).toLong()
