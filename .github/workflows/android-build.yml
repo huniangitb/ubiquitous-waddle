@@ -25,7 +25,7 @@ jobs:
     # 使用 gradle/gradle-build-action 来设置 Gradle 环境
     # 这个 Action 会自动处理 Gradle Wrapper 的下载和缓存
     - name: Setup Gradle
-      uses: gradle/gradle-build-action@v3
+      uses: gradle/actions/setup-gradle@v3
       with:
         gradle-version: 7.5 # 明确指定 Gradle 版本，与 gradle-wrapper.properties 保持一致
 
