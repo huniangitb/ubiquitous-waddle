@@ -1,11 +1,7 @@
+// build.gradle (项目根目录)
+
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
-pluginManagement {
-    repositories {
-        google()        // <-- 添加这一行
-        mavenCentral()  // <-- 添加这一行
-        gradlePluginPortal() // 这一行通常是默认的，但明确写出更好
-    }
-}
+// DO NOT ADD REPOSITORIES OR PLUGINMANAGEMENT HERE
 plugins {
     id 'com.android.application' version '7.4.2' apply false
     id 'com.android.library' version '7.4.2' apply false
