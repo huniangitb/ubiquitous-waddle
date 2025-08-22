@@ -280,7 +280,7 @@ public class MainActivity extends AppCompatActivity {
 }
 
 // --- AudioItem Data Class ---
-class AudioItem {
+public static class AudioItem {
     final Uri uri;
     final String title;
     final String artist;
@@ -295,7 +295,7 @@ class AudioItem {
 }
 
 // --- AudioListAdapter for RecyclerView ---
-class AudioListAdapter extends RecyclerView.Adapter<AudioListAdapter.ViewHolder> {
+public static class AudioListAdapter extends RecyclerView.Adapter<AudioListAdapter.ViewHolder> {
     private final List<AudioItem> audioList;
     private final OnItemClickListener listener;
 
@@ -319,7 +319,7 @@ class AudioListAdapter extends RecyclerView.Adapter<AudioListAdapter.ViewHolder>
     @Override
     public int getItemCount() { return audioList.size(); }
 
-    static class ViewHolder extends RecyclerView.ViewHolder {
+    public static class ViewHolder extends RecyclerView.ViewHolder {
         final TextView titleTextView; final TextView artistTextView;
         ViewHolder(View itemView) {
             super(itemView);
@@ -335,7 +335,7 @@ class AudioListAdapter extends RecyclerView.Adapter<AudioListAdapter.ViewHolder>
 }
 
 // --- MediaPlaybackService (Handles all background playback and notifications) ---
-class MediaPlaybackService extends Service {
+public static class MediaPlaybackService extends Service {
     public static final String ACTION_UPDATE_UI = "com.example.dualaudioplayer.UPDATE_UI";
     public static final String ACTION_PLAY_PAUSE = "ACTION_PLAY_PAUSE", ACTION_NEXT = "ACTION_NEXT", ACTION_PREV = "ACTION_PREV";
     private static final String CHANNEL_ID = "DualAudioChannel";
