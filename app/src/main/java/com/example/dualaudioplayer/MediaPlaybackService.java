@@ -16,7 +16,6 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.widget.Toast;
-import androidx.core.app.NotificationCompat;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -104,7 +103,7 @@ public class MediaPlaybackService extends Service {
     
     private void resumeAudio() {
         if (!areAllPlayersReady() || isPlaying) return;
-        playAudio(); // Re-trigger delay logic on resume
+        playAudio();
     }
 
     private void pauseAudio() {
@@ -179,14 +178,19 @@ public class MediaPlaybackService extends Service {
         PendingIntent nextIntent = PendingIntent.getService(this, 0, new Intent(this, MediaPlaybackService.class).setAction(ACTION_NEXT), PendingIntent.FLAG_IMMUTABLE);
         PendingIntent prevIntent = PendingIntent.getService(this, 0, new Intent(this, MediaPlaybackService.class).setAction(ACTION_PREV), PendingIntent.FLAG_IMMUTABLE);
         
-        Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
+        Notification.Action playPauseAction = new Notification.Action.Builder(
+            isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play,
+            "Play/Pause",
+            playPauseIntent).build();
+
+        Notification notification = new Notification.Builder(this, CHANNEL_ID)
                 .setContentTitle(currentItem.getTitle())
                 .setContentText(currentItem.getArtist())
                 .setSmallIcon(android.R.drawable.ic_media_play)
-                .addAction(android.R.drawable.ic_media_previous, "Previous", prevIntent)
-                .addAction(isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play, "Play/Pause", playPauseIntent)
-                .addAction(android.R.drawable.ic_media_next, "Next", nextIntent)
-                .setStyle(new androidx.media.app.NotificationCompat.MediaStyle().setShowActionsInCompactView(0, 1, 2))
+                .addAction(new Notification.Action.Builder(android.R.drawable.ic_media_previous, "Previous", prevIntent).build())
+                .addAction(playPauseAction)
+                .addAction(new Notification.Action.Builder(android.R.drawable.ic_media_next, "Next", nextIntent).build())
+                .setStyle(new Notification.MediaStyle().setShowActionsInCompactView(0, 1, 2))
                 .setOngoing(isPlaying)
                 .build();
         startForeground(NOTIFICATION_ID, notification);
