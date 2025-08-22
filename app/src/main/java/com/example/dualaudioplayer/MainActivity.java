@@ -8,24 +8,30 @@ import android.media.audiofx.Equalizer;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
-import android.widget.Button;
-import android.widget.SeekBar;
+import android.os.Looper;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.materialswitch.MaterialSwitch;
+import com.google.android.material.slider.Slider;
+
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends Activity {
 
-    private MediaPlayer speakerPlayer, earpiecePlayer;
-    private Equalizer earpieceEqualizer, speakerEqualizer;
-    private Handler handler = new Handler();
+    private MediaPlayer earpiecePlayer, speakerPlayerLeft, speakerPlayerRight;
+    private Equalizer earpieceEqualizer, speakerLpEqualizer;
+    private final Handler handler = new Handler(Looper.getMainLooper());
 
     private TextView statusTextView, currentTimeTextView, totalTimeTextView, delayValueTextView, highPassFilterValueTextView, lowPassFilterValueTextView;
-    private SeekBar playbackSeekBar, delaySeekBar, highPassFilterSeekBar, lowPassFilterSeekBar;
-    private Button playPauseButton;
+    private Slider playbackSlider, delaySlider, highPassFilterSlider, lowPassFilterSlider;
+    private MaterialButton playPauseButton;
+    private MaterialSwitch phaseInvertSwitch;
 
     private boolean isPlaying = false;
     private int speakerDelayMs = 0;
@@ -36,15 +42,14 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         setupUI();
-
         Intent intent = getIntent();
         if (intent != null && Intent.ACTION_VIEW.equals(intent.getAction())) {
             Uri audioUri = intent.getData();
             if (audioUri != null) {
-                statusTextView.setText("正在加载: " + audioUri.getLastPathSegment());
+                statusTextView.setText("加载中: " + audioUri.getLastPathSegment());
                 preparePlayers(audioUri);
             } else {
-                statusTextView.setText("无法获取音频文件。");
+                statusTextView.setText("无法获取音频文件");
             }
         }
     }
@@ -56,193 +61,154 @@ public class MainActivity extends Activity {
         delayValueTextView = findViewById(R.id.delayValueTextView);
         highPassFilterValueTextView = findViewById(R.id.highPassFilterValueTextView);
         lowPassFilterValueTextView = findViewById(R.id.lowPassFilterValueTextView);
-        playbackSeekBar = findViewById(R.id.playbackSeekBar);
-        delaySeekBar = findViewById(R.id.delaySeekBar);
-        highPassFilterSeekBar = findViewById(R.id.highPassFilterSeekBar);
-        lowPassFilterSeekBar = findViewById(R.id.lowPassFilterSeekBar);
+        playbackSlider = findViewById(R.id.playbackSlider);
+        delaySlider = findViewById(R.id.delaySlider);
+        highPassFilterSlider = findViewById(R.id.highPassFilterSlider);
+        lowPassFilterSlider = findViewById(R.id.lowPassFilterSlider);
         playPauseButton = findViewById(R.id.playPauseButton);
+        phaseInvertSwitch = findViewById(R.id.phaseInvertSwitch);
 
-        playPauseButton.setOnClickListener(v -> {
-            if (isPlaying) pauseAudio(); else playAudio();
-        });
-
-        playbackSeekBar.setOnSeekBarChangeListener(createSeekListener());
-        delaySeekBar.setOnSeekBarChangeListener(createDelayListener());
-        highPassFilterSeekBar.setOnSeekBarChangeListener(createHighPassListener());
-        lowPassFilterSeekBar.setOnSeekBarChangeListener(createLowPassListener());
+        playPauseButton.setOnClickListener(v -> togglePlayPause());
+        playbackSlider.addOnChangeListener((slider, value, fromUser) -> { if (fromUser) seekAllPlayers((int) value); });
+        delaySlider.addOnChangeListener((slider, value, fromUser) -> { speakerDelayMs = (int) value; delayValueTextView.setText(String.format(Locale.US, "%d ms", speakerDelayMs)); });
+        highPassFilterSlider.addOnChangeListener((slider, value, fromUser) -> updateHighPassFilter((int) value));
+        lowPassFilterSlider.addOnChangeListener((slider, value, fromUser) -> updateLowPassFilter((int) value));
+        phaseInvertSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> { Toast.makeText(this, "相位反转无法直接实现。\n请使用扬声器延迟滑条调整相位抵消。", Toast.LENGTH_LONG).show(); buttonView.setChecked(false); });
     }
 
     private void preparePlayers(Uri uri) {
         releasePlayers();
         playersPreparedCount = 0;
         playPauseButton.setEnabled(false);
-
         try {
-            speakerPlayer = createPlayer(uri, AudioAttributes.USAGE_MEDIA);
             earpiecePlayer = createPlayer(uri, AudioAttributes.USAGE_VOICE_COMMUNICATION);
+            speakerPlayerLeft = createPlayer(uri, AudioAttributes.USAGE_MEDIA);
+            speakerPlayerRight = createPlayer(uri, AudioAttributes.USAGE_MEDIA);
         } catch (IOException e) {
-            Toast.makeText(this, "加载文件失败", Toast.LENGTH_SHORT).show();
-            statusTextView.setText("错误: " + e.getMessage());
+            handleError("加载文件失败: " + e.getMessage());
         }
     }
-
+    
     private MediaPlayer createPlayer(Uri uri, int usage) throws IOException {
         MediaPlayer player = new MediaPlayer();
         player.setAudioAttributes(new AudioAttributes.Builder().setUsage(usage).build());
         player.setDataSource(this, uri);
-        player.setOnPreparedListener(mp -> onPlayerPrepared(mp));
+        player.setOnPreparedListener(mp -> onPlayerPrepared());
+        player.setOnCompletionListener(mp -> checkCompletion());
         player.prepareAsync();
         return player;
     }
 
-    private synchronized void onPlayerPrepared(MediaPlayer mp) {
+    private synchronized void onPlayerPrepared() {
         playersPreparedCount++;
-        if (playersPreparedCount == 2) {
-            // 设置听筒只播放左声道
+        if (playersPreparedCount == 3) {
             earpiecePlayer.setVolume(1.0f, 0.0f);
-            
-            int duration = speakerPlayer.getDuration();
-            playbackSeekBar.setMax(duration);
+            speakerPlayerLeft.setVolume(1.0f, 0.0f);
+            speakerPlayerRight.setVolume(0.0f, 1.0f);
+            int duration = earpiecePlayer.getDuration();
+            playbackSlider.setValueTo(duration);
             totalTimeTextView.setText(formatTime(duration));
             playPauseButton.setEnabled(true);
             setupEqualizers();
-            Toast.makeText(this, "加载完成，可以播放", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "加载完成", Toast.LENGTH_SHORT).show();
         }
     }
 
+    private void togglePlayPause() { if (isPlaying) pauseAudio(); else playAudio(); }
+
     private void playAudio() {
-        if (speakerPlayer == null || earpiecePlayer == null) return;
+        if (!areAllPlayersReady()) return;
         earpiecePlayer.start();
-        handler.postDelayed(() -> {
-            if (speakerPlayer != null) speakerPlayer.start();
-        }, speakerDelayMs);
+        speakerPlayerRight.start();
+        handler.postDelayed(() -> { if (speakerPlayerLeft != null) speakerPlayerLeft.start(); }, speakerDelayMs);
         isPlaying = true;
-        playPauseButton.setText("暂停");
+        playPauseButton.setIconResource(android.R.drawable.ic_media_pause);
         handler.post(updateSeekBarRunnable);
     }
 
     private void pauseAudio() {
-        if (speakerPlayer == null || earpiecePlayer == null) return;
-        if (speakerPlayer.isPlaying()) speakerPlayer.pause();
-        if (earpiecePlayer.isPlaying()) earpiecePlayer.pause();
+        if (!areAllPlayersReady()) return;
         handler.removeCallbacksAndMessages(null);
+        getAllPlayers().forEach(p -> { if (p != null && p.isPlaying()) p.pause(); });
         isPlaying = false;
-        playPauseButton.setText("播放");
+        playPauseButton.setIconResource(android.R.drawable.ic_media_play);
     }
+    
+    private void seekAllPlayers(int position) { getAllPlayers().forEach(p -> { if (p != null) p.seekTo(position); }); }
 
     private void setupEqualizers() {
         try {
             earpieceEqualizer = new Equalizer(0, earpiecePlayer.getAudioSessionId());
             earpieceEqualizer.setEnabled(true);
-            highPassFilterSeekBar.setEnabled(true);
-            int maxFreqEarpiece = earpieceEqualizer.getCenterFreq((short)(earpieceEqualizer.getNumberOfBands() - 1)) / 1000;
-            highPassFilterSeekBar.setMax(maxFreqEarpiece);
+            highPassFilterSlider.setEnabled(true);
+            float maxFreqEarpiece = earpieceEqualizer.getCenterFreq((short)(earpieceEqualizer.getNumberOfBands() - 1)) / 1000f;
+            highPassFilterSlider.setValueTo(maxFreqEarpiece);
 
-            speakerEqualizer = new Equalizer(0, speakerPlayer.getAudioSessionId());
-            speakerEqualizer.setEnabled(true);
-            lowPassFilterSeekBar.setEnabled(true);
-            int maxFreqSpeaker = speakerEqualizer.getCenterFreq((short)(speakerEqualizer.getNumberOfBands() - 1)) / 1000;
-            lowPassFilterSeekBar.setMax(maxFreqSpeaker);
-
+            speakerLpEqualizer = new Equalizer(0, speakerPlayerLeft.getAudioSessionId());
+            speakerLpEqualizer.setEnabled(true);
+            lowPassFilterSlider.setEnabled(true);
+            float maxFreqSpeaker = speakerLpEqualizer.getCenterFreq((short)(speakerLpEqualizer.getNumberOfBands() - 1)) / 1000f;
+            lowPassFilterSlider.setValueTo(maxFreqSpeaker);
         } catch (Exception e) {
-            Toast.makeText(this, "效果器初始化失败", Toast.LENGTH_SHORT).show();
-            highPassFilterSeekBar.setEnabled(false);
-            lowPassFilterSeekBar.setEnabled(false);
+            handleError("效果器初始化失败");
+            highPassFilterSlider.setEnabled(false);
+            lowPassFilterSlider.setEnabled(false);
         }
     }
-
+    
     private void updateHighPassFilter(int progress) {
         if (earpieceEqualizer == null) return;
         int cutoffFrequency = progress * 1000;
         highPassFilterValueTextView.setText(progress == 0 ? "关闭" : String.format(Locale.US, ">= %d Hz", progress));
         short minLevel = earpieceEqualizer.getBandLevelRange()[0];
-        for (short i = 0; i < earpieceEqualizer.getNumberOfBands(); i++) {
-            earpieceEqualizer.setBandLevel(i, earpieceEqualizer.getCenterFreq(i) < cutoffFrequency ? minLevel : (short) 0);
-        }
+        for (short i = 0; i < earpieceEqualizer.getNumberOfBands(); i++) { earpieceEqualizer.setBandLevel(i, earpieceEqualizer.getCenterFreq(i) < cutoffFrequency ? minLevel : (short) 0); }
     }
 
     private void updateLowPassFilter(int progress) {
-        if (speakerEqualizer == null) return;
+        if (speakerLpEqualizer == null) return;
         int cutoffFrequency = progress * 1000;
         lowPassFilterValueTextView.setText(progress == 0 ? "关闭" : String.format(Locale.US, "<= %d Hz", progress));
-        short minLevel = speakerEqualizer.getBandLevelRange()[0];
-        for (short i = 0; i < speakerEqualizer.getNumberOfBands(); i++) {
-            speakerEqualizer.setBandLevel(i, speakerEqualizer.getCenterFreq(i) > cutoffFrequency ? minLevel : (short) 0);
+        short minLevel = speakerLpEqualizer.getBandLevelRange()[0];
+        for (short i = 0; i < speakerLpEqualizer.getNumberOfBands(); i++) { speakerLpEqualizer.setBandLevel(i, speakerLpEqualizer.getCenterFreq(i) > cutoffFrequency ? minLevel : (short) 0); }
+    }
+
+    private void checkCompletion() {
+        if (!earpiecePlayer.isPlaying() && !speakerPlayerLeft.isPlaying() && !speakerPlayerRight.isPlaying()) {
+            isPlaying = false;
+            playPauseButton.setIconResource(android.R.drawable.ic_media_play);
+            playbackSlider.setValue(0);
+            currentTimeTextView.setText(formatTime(0));
+            seekAllPlayers(0);
+            handler.removeCallbacks(updateSeekBarRunnable);
         }
     }
     
-    // --- Listeners and Utils ---
-
-    private SeekBar.OnSeekBarChangeListener createSeekListener() {
-        return new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if (fromUser) {
-                    if (speakerPlayer != null) speakerPlayer.seekTo(progress);
-                    if (earpiecePlayer != null) earpiecePlayer.seekTo(progress);
-                }
-            }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
-        };
-    }
-
-    private SeekBar.OnSeekBarChangeListener createDelayListener() {
-        return new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                speakerDelayMs = progress;
-                delayValueTextView.setText(String.format(Locale.US, "%d ms", progress));
-            }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
-        };
-    }
-
-    private SeekBar.OnSeekBarChangeListener createHighPassListener() {
-        return new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) { updateHighPassFilter(progress); }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
-        };
-    }
-
-    private SeekBar.OnSeekBarChangeListener createLowPassListener() {
-        return new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) { updateLowPassFilter(progress); }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
-        };
-    }
-
-    private Runnable updateSeekBarRunnable = new Runnable() {
+    private final Runnable updateSeekBarRunnable = new Runnable() {
         @Override
         public void run() {
-            if (isPlaying && speakerPlayer != null) {
-                int currentPosition = speakerPlayer.getCurrentPosition();
-                playbackSeekBar.setProgress(currentPosition);
+            if (isPlaying && areAllPlayersReady()) {
+                int currentPosition = earpiecePlayer.getCurrentPosition();
+                playbackSlider.setValue(currentPosition);
                 currentTimeTextView.setText(formatTime(currentPosition));
                 handler.postDelayed(this, 500);
             }
         }
     };
-
-    private String formatTime(int millis) {
-        return String.format(Locale.US, "%02d:%02d", TimeUnit.MILLISECONDS.toMinutes(millis),
-                TimeUnit.MILLISECONDS.toSeconds(millis) - TimeUnit.MINUTES.toSeconds(TimeUnit.MILLISECONDS.toMinutes(millis)));
-    }
-
+    
     private void releasePlayers() {
         handler.removeCallbacksAndMessages(null);
-        if (speakerPlayer != null) { speakerPlayer.release(); speakerPlayer = null; }
-        if (earpiecePlayer != null) { earpiecePlayer.release(); earpiecePlayer = null; }
-        if (earpieceEqualizer != null) { earpieceEqualizer.release(); earpieceEqualizer = null; }
-        if (speakerEqualizer != null) { speakerEqualizer.release(); speakerEqualizer = null; }
+        getAllPlayers().forEach(p -> { if (p != null) p.release(); });
+        earpiecePlayer = speakerPlayerLeft = speakerPlayerRight = null;
+        if (earpieceEqualizer != null) earpieceEqualizer.release();
+        if (speakerLpEqualizer != null) speakerLpEqualizer.release();
+        earpieceEqualizer = speakerLpEqualizer = null;
         isPlaying = false;
     }
 
     @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        releasePlayers();
-    }
+    protected void onDestroy() { super.onDestroy(); releasePlayers(); }
+    private List<MediaPlayer> getAllPlayers() { return Arrays.asList(earpiecePlayer, speakerPlayerLeft, speakerPlayerRight); }
+    private boolean areAllPlayersReady() { return earpiecePlayer != null && speakerPlayerLeft != null && speakerPlayerRight != null; }
+    private String formatTime(int millis) { return String.format(Locale.US, "%02d:%02d", TimeUnit.MILLISECONDS.toMinutes(millis), TimeUnit.MILLISECONDS.toSeconds(millis) % 60); }
+    private void handleError(String message) { Toast.makeText(this, message, Toast.LENGTH_LONG).show(); statusTextView.setText(message); }
 }

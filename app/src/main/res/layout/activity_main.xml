@@ -1,46 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="16dp"
-    android:gravity="center_horizontal">
-
-    <TextView
-        android:id="@+id/statusTextView"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="请通过文件管理器选择一个音频文件打开"
-        android:textSize="16sp"
-        android:layout_marginBottom="16dp"/>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal">
-        <TextView android:id="@+id/currentTimeTextView" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="00:00"/>
-        <SeekBar android:id="@+id/playbackSeekBar" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="8dp" android:layout_marginEnd="8dp"/>
-        <TextView android:id="@+id/totalTimeTextView" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="00:00"/>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="match_parent">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+        <TextView android:id="@+id/statusTextView" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="请通过文件管理器选择音频" android:textAppearance="?attr/textAppearanceTitleMedium" android:layout_marginBottom="16dp" android:gravity="center"/>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
+            <TextView android:id="@+id/currentTimeTextView" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="00:00" android:textAppearance="?attr/textAppearanceLabelSmall"/>
+            <com.google.android.material.slider.Slider android:id="@+id/playbackSlider" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:valueFrom="0.0" android:valueTo="100.0" android:stepSize="1000"/>
+            <TextView android:id="@+id/totalTimeTextView" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="00:00" android:textAppearance="?attr/textAppearanceLabelSmall"/>
+        </LinearLayout>
+        <com.google.android.material.button.MaterialButton android:id="@+id/playPauseButton" style="?attr/materialIconButtonFilledStyle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center_horizontal" android:layout_marginTop="8dp" app:icon="@android:drawable/ic_media_play" android:enabled="false"/>
+        <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="扬声器延迟" android:textAppearance="?attr/textAppearanceTitleSmall"/>
+                <com.google.android.material.slider.Slider android:id="@+id/delaySlider" android:layout_width="match_parent" android:layout_height="wrap_content" android:valueFrom="0.0" android:valueTo="800.0" android:stepSize="10.0"/>
+                <TextView android:id="@+id/delayValueTextView" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="end" android:text="0 ms" android:textAppearance="?attr/textAppearanceLabelMedium"/>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+        <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="听筒：高通滤波器 (左声道)" android:textAppearance="?attr/textAppearanceTitleSmall"/>
+                <com.google.android.material.slider.Slider android:id="@+id/highPassFilterSlider" android:layout_width="match_parent" android:layout_height="wrap_content" android:valueFrom="0.0" android:valueTo="100.0" android:stepSize="1.0" android:enabled="false"/>
+                <TextView android:id="@+id/highPassFilterValueTextView" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="end" android:text="关闭" android:textAppearance="?attr/textAppearanceLabelMedium"/>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+        <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="扬声器：低通滤波器 (左声道)" android:textAppearance="?attr/textAppearanceTitleSmall"/>
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="(右声道无效果)" android:textAppearance="?attr/textAppearanceBodySmall"/>
+                <com.google.android.material.slider.Slider android:id="@+id/lowPassFilterSlider" android:layout_width="match_parent" android:layout_height="wrap_content" android:valueFrom="0.0" android:valueTo="100.0" android:stepSize="1.0" android:enabled="false"/>
+                <TextView android:id="@+id/lowPassFilterValueTextView" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="end" android:text="关闭" android:textAppearance="?attr/textAppearanceLabelMedium"/>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+        <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp">
+            <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/phaseInvertSwitch" android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="16dp" android:text="相位反转 (概念)" android:checked="false" />
+        </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
-
-    <Button
-        android:id="@+id/playPauseButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="播放"
-        android:layout_marginTop="16dp"
-        android:enabled="false"/>
-
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="扬声器延迟 (ms)" android:layout_marginTop="24dp"/>
-    <SeekBar android:id="@+id/delaySeekBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="800" android:progress="0"/>
-    <TextView android:id="@+id/delayValueTextView" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0 ms"/>
-
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="听筒高通滤波器 (只播放左声道)" android:layout_marginTop="24dp"/>
-    <SeekBar android:id="@+id/highPassFilterSeekBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:progress="0" android:enabled="false"/>
-    <TextView android:id="@+id/highPassFilterValueTextView" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="关闭"/>
-
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="扬声器低通滤波器 (混合声道)" android:layout_marginTop="24dp"/>
-    <SeekBar android:id="@+id/lowPassFilterSeekBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:progress="0" android:enabled="false"/>
-    <TextView android:id="@+id/lowPassFilterValueTextView" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="关闭"/>
-
-</LinearLayout>
+</ScrollView>

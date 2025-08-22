@@ -1,33 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
-
-    <!-- 请求权限来修改音频设置，这对于效果器很重要 -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <!-- 为了兼容旧版安卓，读取外部存储权限 -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
-
-    <application
-        android:allowBackup="true"
-        android:icon="@android:mipmap/sym_def_app_icon"
-        android:label="双路播放器"
-        android:supportsRtl="true"
-        android:theme="@android:style/Theme.Material.Light">
-
-        <activity
-            android:name=".MainActivity"
-            android:exported="true">
+    <application android:allowBackup="true" android:icon="@android:mipmap/sym_def_app_icon" android:label="双路播放器 M3" android:supportsRtl="true" android:theme="@style/Theme.DualAudioPlayer">
+        <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
+                <action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-
             <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="audio/*" />
+                <action android:name="android.intent.action.VIEW" /><category android:name="android.intent.category.DEFAULT" /><data android:mimeType="audio/*" />
             </intent-filter>
         </activity>
     </application>
-
 </manifest>

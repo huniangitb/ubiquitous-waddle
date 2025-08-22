@@ -10,8 +10,8 @@ android {
         applicationId "com.example.dualaudioplayer"
         minSdk 21
         targetSdk 33
-        versionCode 1
-        versionName "1.0"
+        versionCode 4
+        versionName "4.0 M3"
     }
 
     buildTypes {
@@ -27,5 +27,6 @@ android {
 }
 
 dependencies {
-    // 无需额外依赖
+    // 添加 Material Design 3 依赖
+    implementation 'com.google.android.material:material:1.12.0'
 }
